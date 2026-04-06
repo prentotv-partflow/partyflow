@@ -2,12 +2,12 @@ import { initializeApp } from "firebase/app";
 import { getFirestore } from "firebase/firestore";
 
 const firebaseConfig = {
-  apiKey: "AIzaSyBsQLjNiZCssa7TJH178UBY9kyAuhtMzJY",
-  authDomain: "partyflow-3d0cf.firebaseapp.com",
-  projectId: "partyflow-3d0cf",
-  storageBucket: "partyflow-3d0cf.firebasestorage.app",
-  messagingSenderId: "1092792312674",
-  appId: "1:1092792312674:web:479289e14b3190331fc23b"
+  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
+  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
 };
 
 const app = initializeApp(firebaseConfig);
