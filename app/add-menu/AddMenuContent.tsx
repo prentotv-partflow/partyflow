@@ -7,8 +7,8 @@ import { collection, addDoc } from "firebase/firestore";
 
 export default function AddMenuContent() {
   const searchParams = useSearchParams();
-  const eventId = searchParams.get("event");
-
+  const eventId = searchParams.get("eventId");
+  
   const [itemName, setItemName] = useState("");
   const [quantity, setQuantity] = useState("");
   const [menu, setMenu] = useState<
