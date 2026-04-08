@@ -1,25 +1,75 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
 import { db } from "../firebase";
-import { collection, addDoc } from "firebase/firestore";
+import {
+  collection,
+  addDoc,
+  onSnapshot,
+  query,
+  serverTimestamp,
+} from "firebase/firestore";
 
 export default function AddMenuContent() {
   const searchParams = useSearchParams();
-  const eventId = searchParams.get("eventId");
-  
+
+  const eventId =
+    searchParams.get("eventId") || searchParams.get("event");
+
   const [itemName, setItemName] = useState("");
   const [quantity, setQuantity] = useState("");
-  const [menu, setMenu] = useState<
-    { name: string; qty: number }[]
-  >([]);
+  const [menu, setMenu] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  // ✅ REAL-TIME LISTENER (NO orderBy for now)
+  useEffect(() => {
+    if (!eventId) {
+      console.log("❌ No eventId — listener not started");
+      return;
+    }
+
+    console.log("👀 Listening to event:", eventId);
+
+    const q = query(
+      collection(db, "events", eventId, "menu")
+    );
+
+    const unsubscribe = onSnapshot(
+      q,
+      (snapshot) => {
+        const items: any[] = [];
+
+        snapshot.forEach((doc) => {
+          items.push({
+            id: doc.id,
+            ...doc.data(),
+          });
+        });
+
+        console.log("🔥 MENU FROM FIREBASE:", items);
+        setMenu(items);
+      },
+      (error) => {
+        console.error("❌ SNAPSHOT ERROR:", error);
+      }
+    );
+
+    return () => unsubscribe();
+  }, [eventId]);
 
   const addItem = async () => {
     console.log("🔥 BUTTON CLICKED");
 
     if (!itemName || !quantity) {
-      console.log("❌ Missing input");
+      alert("Please fill in all fields");
+      return;
+    }
+
+    const qtyNumber = Number(quantity);
+
+    if (isNaN(qtyNumber) || qtyNumber <= 0) {
+      alert("Quantity must be valid");
       return;
     }
 
@@ -29,31 +79,34 @@ export default function AddMenuContent() {
       return;
     }
 
-    console.log("✅ Event ID:", eventId);
-    console.log("✅ Item:", itemName, quantity);
-
     try {
+      setLoading(true);
+
+      console.log("🚀 Writing to Firestore:", {
+        eventId,
+        itemName,
+        qtyNumber,
+      });
+
       await addDoc(
         collection(db, "events", eventId, "menu"),
         {
           name: itemName,
-          qty: Number(quantity),
+          qty: qtyNumber,
+          createdAt: serverTimestamp(),
         }
       );
 
       console.log("✅ SAVED TO FIREBASE");
-
-      setMenu((prev) => [
-        ...prev,
-        { name: itemName, qty: Number(quantity) },
-      ]);
 
       setItemName("");
       setQuantity("");
 
     } catch (error: any) {
       console.error("❌ FIREBASE ERROR:", error);
-      alert(error.message);
+      alert("Failed to add item");
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -61,7 +114,7 @@ export default function AddMenuContent() {
     <div className="flex items-center justify-center h-screen bg-gray-100">
       <div className="w-full max-w-sm bg-white p-5 rounded-2xl shadow-md">
         <h1 className="text-xl font-bold mb-4 text-center">
-          Add Menu Items 🍹
+            Add Menu Items 🍹🔥🔥🔥
         </h1>
 
         <input
@@ -81,16 +134,18 @@ export default function AddMenuContent() {
         />
 
         <button
-          onClick={addItem}
-          className="w-full bg-black text-white py-3 rounded-lg mb-4"
-        >
+              onClick={() => {
+              console.log("🔥 BUTTON CLICKED");
+              alert("BUTTON WORKS");
+         }}
+>
           Add Item
         </button>
 
         <div className="space-y-2">
-          {menu.map((item, index) => (
+          {menu.map((item) => (
             <div
-              key={index}
+              key={item.id}
               className="flex justify-between p-2 border rounded"
             >
               <span>{item.name}</span>

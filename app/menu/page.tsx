@@ -5,9 +5,10 @@ import { useSearchParams } from "next/navigation";
 import { db } from "../firebase";
 import {
   collection,
-  addDoc,
   serverTimestamp,
   onSnapshot,
+  doc,
+  runTransaction,
 } from "firebase/firestore";
 
 function MenuContent() {
@@ -17,7 +18,6 @@ function MenuContent() {
   const [guestName, setGuestName] = useState("");
   const [guestId, setGuestId] = useState("");
 
-  // ✅ FIXED TYPE (qty is now number)
   const [menu, setMenu] = useState<
     { id: string; name: string; qty: number }[]
   >([]);
@@ -26,13 +26,12 @@ function MenuContent() {
     { name: string; guest: string; id: string }[]
   >([]);
 
-  const [loading, setLoading] = useState(false);
+  const [loadingItem, setLoadingItem] = useState<string | null>(null);
 
-  // 🔥 LOAD MENU FROM FIREBASE (REAL-TIME)
+  // 🔥 LOAD MENU (REAL-TIME)
   useEffect(() => {
     if (!eventId) return;
 
-    // 🔥 Listen to Firebase menu
     const unsubscribe = onSnapshot(
       collection(db, "events", eventId, "menu"),
       (snapshot) => {
@@ -45,12 +44,11 @@ function MenuContent() {
           });
         });
 
-        console.log("🔥 MENU FROM FIREBASE:", items);
         setMenu(items);
       }
     );
 
-    // 👤 Guest ID logic (keep local)
+    // 👤 Guest ID
     const storedId = localStorage.getItem("guestId");
     if (storedId) {
       setGuestId(storedId);
@@ -63,12 +61,12 @@ function MenuContent() {
     return () => unsubscribe();
   }, [eventId]);
 
-  // 🔥 REQUEST HANDLER (still local inventory for now)
-  const handleRequest = async (itemIndex: number) => {
-    console.log("🚀 BUTTON CLICKED");
-
-    const item = menu[itemIndex];
-
+  // 🔥 SAFE REQUEST (TRANSACTION)
+  const handleRequest = async (item: {
+    id: string;
+    name: string;
+    qty: number;
+  }) => {
     if (!guestName.trim()) {
       alert("Please enter your name");
       return;
@@ -79,33 +77,43 @@ function MenuContent() {
       return;
     }
 
-    if (item.qty <= 0) {
-      alert("Item is out of stock");
-      return;
-    }
-
-    setLoading(true);
+    setLoadingItem(item.id);
 
     try {
-      // 🔥 Save request to Firebase
-      const docRef = await addDoc(collection(db, "requests"), {
-        eventId,
-        itemName: item.name,
-        guestName: guestName.trim(),
-        guestId,
-        createdAt: serverTimestamp(),
+      const itemRef = doc(db, "events", eventId, "menu", item.id);
+
+      await runTransaction(db, async (transaction) => {
+        const itemDoc = await transaction.get(itemRef);
+
+        if (!itemDoc.exists()) {
+          throw new Error("Item does not exist");
+        }
+
+        const currentQty = itemDoc.data().qty;
+
+        if (currentQty <= 0) {
+          throw new Error("Out of stock");
+        }
+
+        // ✅ Reduce inventory safely
+        transaction.update(itemRef, {
+          qty: currentQty - 1,
+        });
+
+        // ✅ Save request
+        const requestRef = doc(collection(db, "requests"));
+        transaction.set(requestRef, {
+          eventId,
+          itemName: item.name,
+          guestName: guestName.trim(),
+          guestId,
+          createdAt: serverTimestamp(),
+        });
       });
 
-      console.log("✅ Saved with ID:", docRef.id);
+      console.log("✅ Transaction successful");
 
-      // ⚠️ TEMP: Local update only (will replace with transaction next)
-      const updatedMenu = [...menu];
-      updatedMenu[itemIndex].qty =
-        updatedMenu[itemIndex].qty - 1;
-
-      setMenu(updatedMenu);
-
-      // ✅ Update UI requests list
+      // Optional UI update (real-time will sync anyway)
       setRequests((prev) => [
         ...prev,
         {
@@ -116,21 +124,21 @@ function MenuContent() {
       ]);
 
     } catch (error: any) {
-      console.error("❌ FULL ERROR:", error);
+      console.error("❌ ERROR:", error);
 
-      alert(
-        "Error sending request:\n" +
-          (error?.message || "Unknown error")
-      );
+      if (error.message === "Out of stock") {
+        alert("Item just ran out 😅");
+      } else {
+        alert("Failed to send request. Try again.");
+      }
     } finally {
-      setLoading(false);
+      setLoadingItem(null);
     }
   };
 
   return (
     <div className="min-h-screen bg-gray-100 flex flex-col">
       
-      {/* Header */}
       <div className="bg-white p-4 shadow-sm sticky top-0 z-10">
         <h1 className="text-lg font-semibold text-center">
           Party Menu 🍽️
@@ -143,20 +151,18 @@ function MenuContent() {
 
       <div className="flex-1 p-4 space-y-4 max-w-md w-full mx-auto">
 
-        {/* Name */}
         <div className="bg-white p-3 rounded-xl shadow-sm">
           <input
             type="text"
             placeholder="Enter your name"
             value={guestName}
             onChange={(e) => setGuestName(e.target.value)}
-            className="w-full p-3 border rounded-lg text-sm focus:outline-none text-black placeholder-gray-500"
+            className="w-full p-3 border rounded-lg text-sm text-black"
           />
         </div>
 
-        {/* Menu */}
         <div className="space-y-3">
-          {menu.map((item, index) => (
+          {menu.map((item) => (
             <div
               key={item.id}
               className="bg-white p-4 rounded-xl shadow-sm flex justify-between items-center"
@@ -171,21 +177,21 @@ function MenuContent() {
               </div>
 
               <button
-                onClick={() => handleRequest(index)}
+                onClick={() => handleRequest(item)}
                 disabled={
-                  loading ||
+                  loadingItem === item.id ||
                   item.qty === 0 ||
                   !guestName.trim()
                 }
-                className={`px-4 py-2 rounded-lg text-sm font-medium ${
-                  loading ||
+                className={`px-4 py-2 rounded-lg text-sm ${
+                  loadingItem === item.id ||
                   item.qty === 0 ||
                   !guestName.trim()
                     ? "bg-gray-300 text-gray-500"
-                    : "bg-black text-white active:scale-95"
+                    : "bg-black text-white"
                 }`}
               >
-                {loading
+                {loadingItem === item.id
                   ? "Sending..."
                   : !guestName.trim()
                   ? "Enter Name"
@@ -197,7 +203,6 @@ function MenuContent() {
           ))}
         </div>
 
-        {/* Requests */}
         <div className="bg-white p-4 rounded-xl shadow-sm">
           <h2 className="font-semibold mb-2 text-sm">
             Your Requests

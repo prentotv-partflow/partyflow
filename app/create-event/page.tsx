@@ -7,6 +7,7 @@ import { useState } from "react";
 export default function CreateEvent() {
   const [eventName, setEventName] = useState("");
   const [hostName, setHostName] = useState("");
+  const [loading, setLoading] = useState(false);
 
   const handleSubmit = async () => {
     console.log("🔥 BUTTON CLICKED");
@@ -17,9 +18,10 @@ export default function CreateEvent() {
     }
 
     try {
+      setLoading(true); // 🔥 prevent multiple clicks
+
       console.log("🔥 Sending to Firebase...");
 
-      // 🔥 Create event in Firebase
       const docRef = await addDoc(collection(db, "events"), {
         eventName,
         hostName,
@@ -30,11 +32,13 @@ export default function CreateEvent() {
 
       console.log("✅ Event created with ID:", eventId);
 
-      // ✅ Navigate to host page with REAL event ID
+      // Redirect
       window.location.href = `/host?event=${eventId}`;
     } catch (error) {
       console.error("❌ Error creating event:", error);
-      alert("Something went wrong");
+      alert("Something went wrong. Please try again.");
+    } finally {
+      setLoading(false); // 🔥 always reset
     }
   };
 
@@ -63,9 +67,12 @@ export default function CreateEvent() {
 
         <button
           onClick={handleSubmit}
-          className="w-full bg-black text-white py-3 rounded-lg"
+          disabled={loading}
+          className={`w-full py-3 rounded-lg text-white ${
+            loading ? "bg-gray-400" : "bg-black"
+          }`}
         >
-          Continue
+          {loading ? "Creating..." : "Continue"}
         </button>
       </div>
     </div>
