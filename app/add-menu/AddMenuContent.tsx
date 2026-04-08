@@ -22,7 +22,7 @@ export default function AddMenuContent() {
   const [menu, setMenu] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
 
-  // ✅ REAL-TIME LISTENER (NO orderBy for now)
+  // ✅ REAL-TIME LISTENER
   useEffect(() => {
     if (!eventId) {
       console.log("❌ No eventId — listener not started");
@@ -114,7 +114,7 @@ export default function AddMenuContent() {
     <div className="flex items-center justify-center h-screen bg-gray-100">
       <div className="w-full max-w-sm bg-white p-5 rounded-2xl shadow-md">
         <h1 className="text-xl font-bold mb-4 text-center">
-            Add Menu Items 🍹🔥🔥🔥
+          Add Menu Items 🍹🔥🔥🔥
         </h1>
 
         <input
@@ -133,16 +133,16 @@ export default function AddMenuContent() {
           onChange={(e) => setQuantity(e.target.value)}
         />
 
+        {/* ✅ FIXED BUTTON */}
         <button
-              onClick={() => {
-              console.log("🔥 BUTTON CLICKED");
-              alert("BUTTON WORKS");
-         }}
->
-          Add Item
+          onClick={addItem}
+          className="w-full bg-black text-white p-3 rounded-lg"
+          disabled={loading}
+        >
+          {loading ? "Adding..." : "Add Item"}
         </button>
 
-        <div className="space-y-2">
+        <div className="space-y-2 mt-4">
           {menu.map((item) => (
             <div
               key={item.id}
