@@ -133,7 +133,6 @@ export default function AddMenuContent() {
           onChange={(e) => setQuantity(e.target.value)}
         />
 
-        {/* ✅ FIXED BUTTON */}
         <button
           onClick={addItem}
           className="w-full bg-black text-white p-3 rounded-lg"
@@ -146,10 +145,18 @@ export default function AddMenuContent() {
           {menu.map((item) => (
             <div
               key={item.id}
-              className="flex justify-between p-2 border rounded"
+              className="flex justify-between items-center p-2 border rounded"
             >
               <span>{item.name}</span>
               <span>{item.qty}</span>
+
+              {/* ✅ TEST DELETE BUTTON */}
+              <button
+                onClick={() => console.log("DELETE ID:", item.id)}
+                className="text-red-500 ml-2"
+              >
+                Delete
+              </button>
             </div>
           ))}
         </div>
