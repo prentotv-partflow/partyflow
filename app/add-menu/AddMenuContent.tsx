@@ -9,6 +9,8 @@ import {
   onSnapshot,
   query,
   serverTimestamp,
+  deleteDoc,
+  doc,
 } from "firebase/firestore";
 
 export default function AddMenuContent() {
@@ -110,6 +112,25 @@ export default function AddMenuContent() {
     }
   };
 
+  // 🗑️ DELETE FUNCTION (NEW)
+  const handleDelete = async (id: string) => {
+    if (!eventId) {
+      console.log("❌ Missing eventId for delete");
+      return;
+    }
+
+    try {
+      console.log("🗑️ Deleting item:", id);
+
+      await deleteDoc(doc(db, "events", eventId, "menu", id));
+
+      console.log("✅ ITEM DELETED");
+
+    } catch (error) {
+      console.error("❌ DELETE ERROR:", error);
+    }
+  };
+
   return (
     <div className="flex items-center justify-center h-screen bg-gray-100">
       <div className="w-full max-w-sm bg-white p-5 rounded-2xl shadow-md">
@@ -150,9 +171,9 @@ export default function AddMenuContent() {
               <span>{item.name}</span>
               <span>{item.qty}</span>
 
-              {/* ✅ TEST DELETE BUTTON */}
+              {/* ✅ REAL DELETE BUTTON */}
               <button
-                onClick={() => console.log("DELETE ID:", item.id)}
+                onClick={() => handleDelete(item.id)}
                 className="text-red-500 ml-2"
               >
                 Delete
