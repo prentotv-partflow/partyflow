@@ -1,13 +1,26 @@
 "use client";
 
-import { db } from "../firebase";
-import { collection, addDoc } from "firebase/firestore";
-import { useState } from "react";
+import { db, auth } from "../firebase";
+import { collection, addDoc, serverTimestamp } from "firebase/firestore";
+import { onAuthStateChanged } from "firebase/auth";
+import { useState, useEffect } from "react";
 
 export default function CreateEvent() {
   const [eventName, setEventName] = useState("");
   const [hostName, setHostName] = useState("");
   const [loading, setLoading] = useState(false);
+
+  const [user, setUser] = useState<any>(null);
+
+  // 🔐 Track logged-in user
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (u) => {
+      setUser(u);
+      console.log("👤 USER:", u);
+    });
+
+    return () => unsubscribe();
+  }, []);
 
   const handleSubmit = async () => {
     console.log("🔥 BUTTON CLICKED");
@@ -17,15 +30,21 @@ export default function CreateEvent() {
       return;
     }
 
+    if (!user) {
+      alert("You must be logged in to create an event");
+      return;
+    }
+
     try {
-      setLoading(true); // 🔥 prevent multiple clicks
+      setLoading(true);
 
       console.log("🔥 Sending to Firebase...");
 
       const docRef = await addDoc(collection(db, "events"), {
         eventName,
         hostName,
-        createdAt: new Date(),
+        hostId: user.uid, // 🔐 THIS IS THE KEY
+        createdAt: serverTimestamp(),
       });
 
       const eventId = docRef.id;
@@ -38,7 +57,7 @@ export default function CreateEvent() {
       console.error("❌ Error creating event:", error);
       alert("Something went wrong. Please try again.");
     } finally {
-      setLoading(false); // 🔥 always reset
+      setLoading(false);
     }
   };
 
@@ -74,6 +93,12 @@ export default function CreateEvent() {
         >
           {loading ? "Creating..." : "Continue"}
         </button>
+
+        {!user && (
+          <p className="text-xs text-red-500 text-center mt-3">
+            ⚠️ You must log in before creating an event
+          </p>
+        )}
       </div>
     </div>
   );
