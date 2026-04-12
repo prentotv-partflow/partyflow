@@ -7,13 +7,16 @@ import { useSearchParams } from "next/navigation";
 import { db } from "../firebase";
 import { doc, getDoc } from "firebase/firestore";
 
+// testing save
+
 type EventType = {
   eventName: string;
   hostName: string;
   hostId: string;
 };
 
-// 🔥 Wrapper (required for Next.js 16)
+//test save
+// ✅ REQUIRED: Default export = Suspense wrapper ONLY
 export default function EventPage() {
   return (
     <Suspense fallback={<p>Loading event...</p>}>
@@ -22,7 +25,7 @@ export default function EventPage() {
   );
 }
 
-// 🔥 Actual page logic
+// ✅ ALL logic goes here
 function EventContent() {
   const searchParams = useSearchParams();
   const eventId = searchParams.get("event");
