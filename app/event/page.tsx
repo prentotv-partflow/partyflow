@@ -13,7 +13,7 @@ type EventType = {
   hostId: string;
 };
 
-// ✅ REQUIRED: Default export = Suspense wrapper ONLY
+// ✅ ONLY Suspense wrapper here
 export default function EventPage() {
   return (
     <Suspense fallback={<p>Loading event...</p>}>
@@ -22,7 +22,7 @@ export default function EventPage() {
   );
 }
 
-// 🔥 ALL logic moved here
+// ✅ ALL logic goes here
 function EventContent() {
   const searchParams = useSearchParams();
   const eventId = searchParams.get("event");
@@ -116,7 +116,6 @@ function EventContent() {
   );
 }
 
-// styles
 const container = {
   padding: "20px",
   textAlign: "center" as const,
