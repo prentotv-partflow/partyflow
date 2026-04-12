@@ -40,9 +40,15 @@ function HostContent() {
   const [showModal, setShowModal] = useState(false);
   const [confirmText, setConfirmText] = useState("");
 
+  // ✅ FIXED: ALWAYS USE PRODUCTION DOMAIN
   useEffect(() => {
     if (eventId) {
-      setEventUrl(`${window.location.origin}/event?event=${eventId}`);
+      const baseUrl = "https://partyflow.vercel.app";
+      const url = `${baseUrl}/event?event=${eventId}`;
+
+      console.log("✅ QR URL:", url); // DEBUG
+
+      setEventUrl(url);
     }
   }, [eventId]);
 
@@ -54,7 +60,11 @@ function HostContent() {
       }
 
       const snap = await getDoc(doc(db, "events", eventId));
-      if (!snap.exists()) return setAuthorized(false);
+
+      if (!snap.exists()) {
+        console.log("❌ Event not found in Firestore:", eventId);
+        return setAuthorized(false);
+      }
 
       const data = snap.data() as EventType;
 
@@ -101,6 +111,12 @@ function HostContent() {
 
       <div style={{ marginTop: "30px", textAlign: "center" }}>
         <h3>Scan to Join Event</h3>
+
+        {/* ✅ DEBUG (TEMP) */}
+        <p style={{ fontSize: "12px" }}>
+          QR URL: {eventUrl}
+        </p>
+
         {eventUrl && <QRCodeCanvas value={eventUrl} size={200} />}
       </div>
 
