@@ -1,5 +1,7 @@
 "use client";
 
+export const dynamic = "force-dynamic";
+
 import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { db } from "../firebase";
@@ -53,12 +55,19 @@ export default function EventPage() {
 
   // Handle guest submit
   const handleEnter = () => {
-    if (guestName.trim() === "") {
+    const trimmed = guestName.trim();
+
+    if (trimmed === "") {
       setError("Please enter your name");
       return;
     }
 
-    if (!/^[A-Za-z\s]+$/.test(guestName)) {
+    if (trimmed.length > 30) {
+      setError("Name must be 30 characters or less");
+      return;
+    }
+
+    if (!/^[A-Za-z\s]+$/.test(trimmed)) {
       setError("Only letters and spaces allowed");
       return;
     }
@@ -66,6 +75,12 @@ export default function EventPage() {
     setError("");
     setGuestEntered(true);
   };
+
+  // Disable button logic
+  const isValid =
+    guestName.trim() !== "" &&
+    guestName.trim().length <= 30 &&
+    /^[A-Za-z\s]+$/.test(guestName);
 
   // Loading states
   if (loading) return <p>Loading event...</p>;
@@ -81,13 +96,29 @@ export default function EventPage() {
 
         <input
           value={guestName}
-          onChange={(e) => setGuestName(e.target.value)}
-          style={input}
+          onChange={(e) => {
+            setGuestName(e.target.value);
+            if (error) setError(""); // clear error as user types
+          }}
+          style={{
+            ...input,
+            border:
+              error.length > 0 ? "2px solid red" : "1px solid #ccc",
+          }}
+          maxLength={30}
         />
 
         {error && <p style={{ color: "red" }}>{error}</p>}
 
-        <button onClick={handleEnter} style={button}>
+        <button
+          onClick={handleEnter}
+          disabled={!isValid}
+          style={{
+            ...button,
+            backgroundColor: isValid ? "#000" : "gray",
+            color: "white",
+          }}
+        >
           Enter Event
         </button>
       </div>
@@ -102,9 +133,11 @@ export default function EventPage() {
 
       <hr style={{ margin: "20px 0" }} />
 
-      <p>Welcome, <strong>{guestName}</strong> 👋</p>
+      <p>
+        Welcome, <strong>{guestName}</strong> 👋
+      </p>
 
-      {/* Future features go here */}
+      {/* Future features */}
       <p>🎉 More features coming soon...</p>
     </div>
   );
