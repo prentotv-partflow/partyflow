@@ -28,6 +28,8 @@ function EventContent() {
   const searchParams = useSearchParams();
   const eventId = searchParams.get("event");
 
+  console.log("🔍 EVENT ID FROM URL:", eventId);
+
   const [event, setEvent] = useState<EventType | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -38,21 +40,30 @@ function EventContent() {
   useEffect(() => {
     const fetchEvent = async () => {
       if (!eventId) {
+        console.log("❌ No eventId found in URL");
         setLoading(false);
         return;
       }
 
       try {
+        console.log("📡 Fetching event from Firestore:", eventId);
+
         const ref = doc(db, "events", eventId);
         const snap = await getDoc(ref);
 
+        console.log("📄 Firestore response exists?:", snap.exists());
+
         if (!snap.exists()) {
+          console.log("❌ Event document NOT FOUND in Firestore");
           setEvent(null);
         } else {
-          setEvent(snap.data() as EventType);
+          const data = snap.data();
+          console.log("✅ Event data:", data);
+
+          setEvent(data as EventType);
         }
       } catch (err) {
-        console.error(err);
+        console.error("❌ Firestore fetch error:", err);
         setEvent(null);
       } finally {
         setLoading(false);
@@ -78,7 +89,11 @@ function EventContent() {
   };
 
   if (loading) return <p>Loading event...</p>;
-  if (!event) return <p>Event not found</p>;
+
+  if (!event) {
+    console.log("🚨 FINAL STATE: Event is NULL");
+    return <p>Event not found</p>;
+  }
 
   if (!guestEntered) {
     return (
