@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useSearchParams } from "next/navigation";
+export const dynamic = "force-dynamic";
+
+import { Suspense, useEffect, useState } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
 import { auth, db } from "../firebase";
 import { doc, getDoc, deleteDoc } from "firebase/firestore";
 import { onAuthStateChanged } from "firebase/auth";
-import { useRouter } from "next/navigation";
 import { QRCodeCanvas } from "qrcode.react";
 
 type EventType = {
@@ -16,7 +17,17 @@ type EventType = {
   createdAt: any;
 };
 
+// ✅ ONLY wrapper here
 export default function HostPage() {
+  return (
+    <Suspense fallback={<p>Loading...</p>}>
+      <HostContent />
+    </Suspense>
+  );
+}
+
+// ✅ ALL logic here
+function HostContent() {
   const searchParams = useSearchParams();
   const eventId = searchParams.get("event");
   const router = useRouter();
@@ -29,7 +40,6 @@ export default function HostPage() {
   const [showModal, setShowModal] = useState(false);
   const [confirmText, setConfirmText] = useState("");
 
-  // QR URL
   useEffect(() => {
     if (eventId) {
       setEventUrl(`${window.location.origin}/event?event=${eventId}`);
@@ -89,57 +99,25 @@ export default function HostPage() {
       <h2>{event.eventName}</h2>
       <p>Hosted by: {event.hostName}</p>
 
-      {/* QR CODE */}
       <div style={{ marginTop: "30px", textAlign: "center" }}>
         <h3>Scan to Join Event</h3>
         {eventUrl && <QRCodeCanvas value={eventUrl} size={200} />}
       </div>
 
-      {/* DELETE */}
       <button onClick={() => setShowModal(true)}>Delete Event</button>
 
-      {/* MODAL */}
       {showModal && (
-        <div style={modal as React.CSSProperties}>
-          <div style={box as React.CSSProperties}>
+        <div style={modal}>
+          <div style={box}>
             <p>Type {event.eventName}</p>
-
             <input
               value={confirmText}
               onChange={(e) => setConfirmText(e.target.value)}
-              style={{
-                width: "100%",
-                marginTop: "10px",
-              }}
             />
-
-            <div
-              style={{
-                marginTop: "20px",
-                display: "flex",
-                gap: "10px",
-              }}
-            >
-              <button onClick={() => setShowModal(false)}>
-                Cancel
-              </button>
-
-              <button
-                onClick={handleDelete}
-                disabled={
-                  confirmText !== event.eventName || deleting
-                }
-                style={{
-                  backgroundColor:
-                    confirmText === event.eventName
-                      ? "red"
-                      : "gray",
-                  color: "white",
-                }}
-              >
-                {deleting ? "Deleting..." : "Delete"}
-              </button>
-            </div>
+            <button onClick={() => setShowModal(false)}>Cancel</button>
+            <button onClick={handleDelete}>
+              {deleting ? "Deleting..." : "Delete"}
+            </button>
           </div>
         </div>
       )}
@@ -147,8 +125,7 @@ export default function HostPage() {
   );
 }
 
-// ✅ FINAL FIX (SAFE FOR PRODUCTION)
-const modal = {
+const modal: React.CSSProperties = {
   position: "fixed",
   top: 0,
   left: 0,
@@ -158,11 +135,11 @@ const modal = {
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
-} as const;
+};
 
-const box = {
+const box: React.CSSProperties = {
   background: "white",
   padding: "20px",
   borderRadius: "8px",
   width: "300px",
-} as const;
+};
