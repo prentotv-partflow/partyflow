@@ -8,11 +8,12 @@ export default function Home() {
           Plan. Invite. Celebrate.
         </p>
 
-        <Link href="/create-event">
+        <Link href="/login">
   <button className="bg-white text-black px-6 py-3 rounded-full font-semibold">
     Get Started
   </button>
 </Link>
+
       </div>
     </div>
   );

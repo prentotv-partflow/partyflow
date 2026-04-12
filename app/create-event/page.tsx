@@ -1,26 +1,13 @@
 "use client";
 
 import { db, auth } from "../firebase";
-import { collection, addDoc, serverTimestamp } from "firebase/firestore";
-import { onAuthStateChanged } from "firebase/auth";
-import { useState, useEffect } from "react";
+import { collection, addDoc } from "firebase/firestore";
+import { useState } from "react";
 
 export default function CreateEvent() {
   const [eventName, setEventName] = useState("");
   const [hostName, setHostName] = useState("");
   const [loading, setLoading] = useState(false);
-
-  const [user, setUser] = useState<any>(null);
-
-  // 🔐 Track logged-in user
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (u) => {
-      setUser(u);
-      console.log("👤 USER:", u);
-    });
-
-    return () => unsubscribe();
-  }, []);
 
   const handleSubmit = async () => {
     console.log("🔥 BUTTON CLICKED");
@@ -30,8 +17,11 @@ export default function CreateEvent() {
       return;
     }
 
+    // ⭐ GET CURRENT USER
+    const user = auth.currentUser;
+
     if (!user) {
-      alert("You must be logged in to create an event");
+      alert("You must be logged in");
       return;
     }
 
@@ -43,15 +33,15 @@ export default function CreateEvent() {
       const docRef = await addDoc(collection(db, "events"), {
         eventName,
         hostName,
-        hostId: user.uid, // 🔐 THIS IS THE KEY
-        createdAt: serverTimestamp(),
+        hostId: user.uid,          // 🔥 NEW
+        hostEmail: user.email,     // 🔥 OPTIONAL
+        createdAt: new Date(),
       });
 
       const eventId = docRef.id;
 
       console.log("✅ Event created with ID:", eventId);
 
-      // Redirect
       window.location.href = `/host?event=${eventId}`;
     } catch (error) {
       console.error("❌ Error creating event:", error);
@@ -93,12 +83,6 @@ export default function CreateEvent() {
         >
           {loading ? "Creating..." : "Continue"}
         </button>
-
-        {!user && (
-          <p className="text-xs text-red-500 text-center mt-3">
-            ⚠️ You must log in before creating an event
-          </p>
-        )}
       </div>
     </div>
   );
