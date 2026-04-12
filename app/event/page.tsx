@@ -7,15 +7,12 @@ import { useSearchParams } from "next/navigation";
 import { db } from "../firebase";
 import { doc, getDoc } from "firebase/firestore";
 
-// testing save
-
 type EventType = {
   eventName: string;
   hostName: string;
   hostId: string;
 };
 
-//test save
 // ✅ REQUIRED: Default export = Suspense wrapper ONLY
 export default function EventPage() {
   return (
@@ -25,7 +22,7 @@ export default function EventPage() {
   );
 }
 
-// ✅ ALL logic goes here
+// 🔥 ALL logic moved here
 function EventContent() {
   const searchParams = useSearchParams();
   const eventId = searchParams.get("event");
@@ -65,19 +62,12 @@ function EventContent() {
   }, [eventId]);
 
   const handleEnter = () => {
-    const trimmed = guestName.trim();
-
-    if (trimmed === "") {
+    if (guestName.trim() === "") {
       setError("Please enter your name");
       return;
     }
 
-    if (trimmed.length > 30) {
-      setError("Name must be 30 characters or less");
-      return;
-    }
-
-    if (!/^[A-Za-z\s]+$/.test(trimmed)) {
+    if (!/^[A-Za-z\s]+$/.test(guestName)) {
       setError("Only letters and spaces allowed");
       return;
     }
@@ -85,11 +75,6 @@ function EventContent() {
     setError("");
     setGuestEntered(true);
   };
-
-  const isValid =
-    guestName.trim() !== "" &&
-    guestName.trim().length <= 30 &&
-    /^[A-Za-z\s]+$/.test(guestName);
 
   if (loading) return <p>Loading event...</p>;
   if (!event) return <p>Event not found</p>;
@@ -102,29 +87,13 @@ function EventContent() {
 
         <input
           value={guestName}
-          onChange={(e) => {
-            setGuestName(e.target.value);
-            if (error) setError("");
-          }}
-          style={{
-            ...input,
-            border:
-              error.length > 0 ? "2px solid red" : "1px solid #ccc",
-          }}
-          maxLength={30}
+          onChange={(e) => setGuestName(e.target.value)}
+          style={input}
         />
 
         {error && <p style={{ color: "red" }}>{error}</p>}
 
-        <button
-          onClick={handleEnter}
-          disabled={!isValid}
-          style={{
-            ...button,
-            backgroundColor: isValid ? "#000" : "gray",
-            color: "white",
-          }}
-        >
+        <button onClick={handleEnter} style={button}>
           Enter Event
         </button>
       </div>
@@ -147,6 +116,7 @@ function EventContent() {
   );
 }
 
+// styles
 const container = {
   padding: "20px",
   textAlign: "center" as const,
