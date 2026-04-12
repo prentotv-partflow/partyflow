@@ -2,7 +2,7 @@
 
 export const dynamic = "force-dynamic";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { db } from "../firebase";
 import { doc, getDoc } from "firebase/firestore";
@@ -13,19 +13,27 @@ type EventType = {
   hostId: string;
 };
 
+// 🔥 Wrapper (required for Next.js 16)
 export default function EventPage() {
+  return (
+    <Suspense fallback={<p>Loading event...</p>}>
+      <EventContent />
+    </Suspense>
+  );
+}
+
+// 🔥 Actual page logic
+function EventContent() {
   const searchParams = useSearchParams();
   const eventId = searchParams.get("event");
 
   const [event, setEvent] = useState<EventType | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Guest state
   const [guestName, setGuestName] = useState("");
   const [guestEntered, setGuestEntered] = useState(false);
   const [error, setError] = useState("");
 
-  // Fetch event
   useEffect(() => {
     const fetchEvent = async () => {
       if (!eventId) {
@@ -53,7 +61,6 @@ export default function EventPage() {
     fetchEvent();
   }, [eventId]);
 
-  // Handle guest submit
   const handleEnter = () => {
     const trimmed = guestName.trim();
 
@@ -76,18 +83,14 @@ export default function EventPage() {
     setGuestEntered(true);
   };
 
-  // Disable button logic
   const isValid =
     guestName.trim() !== "" &&
     guestName.trim().length <= 30 &&
     /^[A-Za-z\s]+$/.test(guestName);
 
-  // Loading states
   if (loading) return <p>Loading event...</p>;
-
   if (!event) return <p>Event not found</p>;
 
-  // Step 1: Enter name
   if (!guestEntered) {
     return (
       <div style={container}>
@@ -98,7 +101,7 @@ export default function EventPage() {
           value={guestName}
           onChange={(e) => {
             setGuestName(e.target.value);
-            if (error) setError(""); // clear error as user types
+            if (error) setError("");
           }}
           style={{
             ...input,
@@ -125,7 +128,6 @@ export default function EventPage() {
     );
   }
 
-  // Step 2: Event view
   return (
     <div style={container}>
       <h1>{event.eventName}</h1>
@@ -137,7 +139,6 @@ export default function EventPage() {
         Welcome, <strong>{guestName}</strong> 👋
       </p>
 
-      {/* Future features */}
       <p>🎉 More features coming soon...</p>
     </div>
   );
