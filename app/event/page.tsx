@@ -14,7 +14,7 @@ type EventType = {
   hostId: string;
 };
 
-// ✅ ONLY Suspense wrapper here
+// ✅ Wrapper
 export default function EventPage() {
   return (
     <Suspense fallback={<p>Loading event...</p>}>
@@ -23,7 +23,7 @@ export default function EventPage() {
   );
 }
 
-// ✅ ALL logic goes here
+// ✅ Logic
 function EventContent() {
   const searchParams = useSearchParams();
   const eventId = searchParams.get("event");
@@ -51,16 +51,17 @@ function EventContent() {
         const ref = doc(db, "events", eventId);
         const snap = await getDoc(ref);
 
-        console.log("📄 Firestore response exists?:", snap.exists());
+        console.log("📄 Firestore exists?:", snap.exists());
 
         if (!snap.exists()) {
-          console.log("❌ Event document NOT FOUND in Firestore");
+          console.log("❌ Event NOT FOUND in Firestore");
           setEvent(null);
         } else {
-          const data = snap.data();
+          const data = snap.data(); // ✅ FIX
+
           console.log("✅ Event data:", data);
 
-          setEvent(data as EventType);
+          setEvent(data as EventType); // ✅ FIX
         }
       } catch (err) {
         console.error("❌ Firestore fetch error:", err);
