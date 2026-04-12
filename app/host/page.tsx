@@ -119,7 +119,7 @@ export default function HostPage() {
 }
 
 // ✅ FIXED TYPES
-const modal: React.CSSProperties = {
+const modal = {
   position: "fixed",
   top: 0,
   left: 0,
@@ -129,11 +129,11 @@ const modal: React.CSSProperties = {
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
-};
+} as const;
 
-const box: React.CSSProperties = {
+const box = {
   background: "white",
   padding: "20px",
   borderRadius: "8px",
   width: "300px",
-};
+} as const;
