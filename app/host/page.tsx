@@ -3,8 +3,8 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { auth, db } from "../firebase";
-import { doc, getDoc, deleteDoc, updateDoc } from "firebase/firestore";
-import { onAuthStateChanged, User } from "firebase/auth";
+import { doc, getDoc, deleteDoc } from "firebase/firestore";
+import { onAuthStateChanged } from "firebase/auth";
 import { useRouter } from "next/navigation";
 import { QRCodeCanvas } from "qrcode.react";
 
@@ -100,17 +100,46 @@ export default function HostPage() {
 
       {/* MODAL */}
       {showModal && (
-        <div style={modal}>
-          <div style={box}>
+        <div style={modal as React.CSSProperties}>
+          <div style={box as React.CSSProperties}>
             <p>Type {event.eventName}</p>
+
             <input
               value={confirmText}
               onChange={(e) => setConfirmText(e.target.value)}
+              style={{
+                width: "100%",
+                marginTop: "10px",
+              }}
             />
-            <button onClick={() => setShowModal(false)}>Cancel</button>
-            <button onClick={handleDelete}>
-              {deleting ? "Deleting..." : "Delete"}
-            </button>
+
+            <div
+              style={{
+                marginTop: "20px",
+                display: "flex",
+                gap: "10px",
+              }}
+            >
+              <button onClick={() => setShowModal(false)}>
+                Cancel
+              </button>
+
+              <button
+                onClick={handleDelete}
+                disabled={
+                  confirmText !== event.eventName || deleting
+                }
+                style={{
+                  backgroundColor:
+                    confirmText === event.eventName
+                      ? "red"
+                      : "gray",
+                  color: "white",
+                }}
+              >
+                {deleting ? "Deleting..." : "Delete"}
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -118,7 +147,7 @@ export default function HostPage() {
   );
 }
 
-// ✅ FIXED TYPES
+// ✅ FINAL FIX (SAFE FOR PRODUCTION)
 const modal = {
   position: "fixed",
   top: 0,
