@@ -13,15 +13,25 @@ import {
   doc,
 } from "firebase/firestore";
 
+// ✅ TYPE SAFETY (no more "any")
+type MenuItem = {
+  id: string;
+  name: string;
+  qty: number;
+};
+
 export default function AddMenuContent() {
   const searchParams = useSearchParams();
 
+  // ✅ SUPPORT BOTH PARAM FORMATS (IMPORTANT FOR QR + NAV)
   const eventId =
-    searchParams.get("eventId") || searchParams.get("event");
+    searchParams.get("event") || searchParams.get("eventId");
+
+  console.log("📌 Event ID (Add Menu):", eventId);
 
   const [itemName, setItemName] = useState("");
   const [quantity, setQuantity] = useState("");
-  const [menu, setMenu] = useState<any[]>([]);
+  const [menu, setMenu] = useState<MenuItem[]>([]);
   const [loading, setLoading] = useState(false);
 
   // ✅ REAL-TIME LISTENER
@@ -31,7 +41,7 @@ export default function AddMenuContent() {
       return;
     }
 
-    console.log("👀 Listening to event:", eventId);
+    console.log("👀 Listening to menu for event:", eventId);
 
     const q = query(
       collection(db, "events", eventId, "menu")
@@ -40,14 +50,10 @@ export default function AddMenuContent() {
     const unsubscribe = onSnapshot(
       q,
       (snapshot) => {
-        const items: any[] = [];
-
-        snapshot.forEach((doc) => {
-          items.push({
-            id: doc.id,
-            ...doc.data(),
-          });
-        });
+        const items: MenuItem[] = snapshot.docs.map((doc) => ({
+          id: doc.id,
+          ...(doc.data() as Omit<MenuItem, "id">),
+        }));
 
         console.log("🔥 MENU FROM FIREBASE:", items);
         setMenu(items);
@@ -60,10 +66,11 @@ export default function AddMenuContent() {
     return () => unsubscribe();
   }, [eventId]);
 
+  // ✅ ADD ITEM
   const addItem = async () => {
-    console.log("🔥 BUTTON CLICKED");
+    console.log("🔥 ADD BUTTON CLICKED");
 
-    if (!itemName || !quantity) {
+    if (!itemName.trim() || !quantity.trim()) {
       alert("Please fill in all fields");
       return;
     }
@@ -71,7 +78,7 @@ export default function AddMenuContent() {
     const qtyNumber = Number(quantity);
 
     if (isNaN(qtyNumber) || qtyNumber <= 0) {
-      alert("Quantity must be valid");
+      alert("Quantity must be a valid number greater than 0");
       return;
     }
 
@@ -93,7 +100,7 @@ export default function AddMenuContent() {
       await addDoc(
         collection(db, "events", eventId, "menu"),
         {
-          name: itemName,
+          name: itemName.trim(),
           qty: qtyNumber,
           createdAt: serverTimestamp(),
         }
@@ -103,7 +110,6 @@ export default function AddMenuContent() {
 
       setItemName("");
       setQuantity("");
-
     } catch (error: any) {
       console.error("❌ FIREBASE ERROR:", error);
       alert("Failed to add item");
@@ -112,7 +118,7 @@ export default function AddMenuContent() {
     }
   };
 
-  // 🗑️ DELETE FUNCTION (NEW)
+  // 🗑️ DELETE ITEM
   const handleDelete = async (id: string) => {
     if (!eventId) {
       console.log("❌ Missing eventId for delete");
@@ -125,11 +131,19 @@ export default function AddMenuContent() {
       await deleteDoc(doc(db, "events", eventId, "menu", id));
 
       console.log("✅ ITEM DELETED");
-
     } catch (error) {
       console.error("❌ DELETE ERROR:", error);
     }
   };
+
+  // ✅ EARLY EXIT (important UX)
+  if (!eventId) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <p>Missing event ID in URL</p>
+      </div>
+    );
+  }
 
   return (
     <div className="flex items-center justify-center h-screen bg-gray-100">
@@ -163,23 +177,28 @@ export default function AddMenuContent() {
         </button>
 
         <div className="space-y-2 mt-4">
-          {menu.map((item) => (
-            <div
-              key={item.id}
-              className="flex justify-between items-center p-2 border rounded"
-            >
-              <span>{item.name}</span>
-              <span>{item.qty}</span>
-
-              {/* ✅ REAL DELETE BUTTON */}
-              <button
-                onClick={() => handleDelete(item.id)}
-                className="text-red-500 ml-2"
+          {menu.length === 0 ? (
+            <p className="text-center text-gray-500">
+              No items yet
+            </p>
+          ) : (
+            menu.map((item) => (
+              <div
+                key={item.id}
+                className="flex justify-between items-center p-2 border rounded"
               >
-                Delete
-              </button>
-            </div>
-          ))}
+                <span>{item.name}</span>
+                <span>{item.qty}</span>
+
+                <button
+                  onClick={() => handleDelete(item.id)}
+                  className="text-red-500 ml-2"
+                >
+                  Delete
+                </button>
+              </div>
+            ))
+          )}
         </div>
       </div>
     </div>
