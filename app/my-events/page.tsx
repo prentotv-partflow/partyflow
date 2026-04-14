@@ -65,6 +65,10 @@ export default function MyEvents() {
         </button>
       </div>
 
+      <div className="bg-red-500 text-white p-4">
+  Tailwind Test
+</div>
+
       {/* ✅ EVENTS LIST */}
       {events.length === 0 ? (
         <p>No events found.</p>
