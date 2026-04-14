@@ -47,47 +47,57 @@ export default function MyEvents() {
 
     return () => unsubscribe();
   }, [router]);
-    
+
   return (
-    <div style={{ padding: "20px" }}>
-{/* ✅ HEADER + BUTTON */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <h1>My Events</h1>
+    <div className="min-h-screen bg-[#0A0C12] text-white p-4">
+      
+      {/* ✅ HEADER */}
+      <div className="flex justify-between items-center mb-6">
+        <h1 className="text-2xl font-semibold">My Events</h1>
 
         <button
           onClick={() => router.push("/create-event")}
-          style={{
-            padding: "8px 12px",
-            cursor: "pointer",
-          }}
+          className="bg-[#508CFF] px-4 py-2 rounded-full text-sm font-medium hover:opacity-90 transition"
         >
           + Create Event
         </button>
       </div>
 
-      <div className="bg-red-500 text-white p-4">
-  Tailwind Test
-</div>
-
-      {/* ✅ EVENTS LIST */}
+      {/* ✅ EMPTY STATE */}
       {events.length === 0 ? (
-        <p>No events found.</p>
+        <div className="text-gray-400 text-sm">
+          No events found.
+        </div>
       ) : (
-        events.map((event) => (
-          <div
-            key={event.id}
-            style={{
-              border: "1px solid #ccc",
-              padding: "10px",
-              marginTop: "10px",
-              cursor: "pointer",
-            }}
-            onClick={() => router.push(`/host?event=${event.id}`)}
-          >
-            <h3>{event.eventName}</h3>
-            <p>Host: {event.hostName}</p>
-          </div>
-        ))
+        
+        /* ✅ EVENT CARDS */
+        <div className="space-y-4">
+          {events.map((event) => (
+            <div
+              key={event.id}
+              onClick={() => router.push(`/host?event=${event.id}`)}
+              className="bg-[#191C24] rounded-2xl p-4 border border-white/5 hover:border-[#508CFF]/40 transition cursor-pointer"
+            >
+              <h2 className="text-lg font-semibold">
+                {event.eventName}
+              </h2>
+
+              <p className="text-sm text-gray-400 mb-3">
+                Host: {event.hostName}
+              </p>
+
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  router.push(`/host?event=${event.id}`);
+                }}
+                className="bg-[#508CFF] px-4 py-2 rounded-full text-sm hover:opacity-90 transition"
+              >
+                Enter Event
+              </button>
+            </div>
+          ))}
+        </div>
       )}
     </div>
   );
