@@ -6,7 +6,7 @@ import { collection, query, where, getDocs } from "firebase/firestore";
 import { onAuthStateChanged, User } from "firebase/auth";
 import { useRouter } from "next/navigation";
 
-// ✅ Event Type
+// ✅ Event Types
 type EventType = {
   id: string;
   eventName: string;
@@ -47,10 +47,10 @@ export default function MyEvents() {
 
     return () => unsubscribe();
   }, [router]);
-
+    
   return (
     <div style={{ padding: "20px" }}>
-      {/* ✅ HEADER + BUTTON */}
+{/* ✅ HEADER + BUTTON */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <h1>My Events</h1>
 
