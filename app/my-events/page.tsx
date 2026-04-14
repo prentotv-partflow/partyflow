@@ -72,31 +72,58 @@ export default function MyEvents() {
         
         /* ✅ EVENT CARDS */
         <div className="space-y-4">
-          {events.map((event) => (
-            <div
-              key={event.id}
-              onClick={() => router.push(`/host?event=${event.id}`)}
-              className="bg-[#191C24] rounded-2xl p-4 border border-white/5 hover:border-[#508CFF]/40 transition cursor-pointer"
-            >
-              <h2 className="text-lg font-semibold">
-                {event.eventName}
-              </h2>
+          {events.map((event) => {
+            // 🔥 TEMP LOGIC (can be replaced later with real activity data)
+            const isActive = true;
 
-              <p className="text-sm text-gray-400 mb-3">
-                Host: {event.hostName}
-              </p>
-
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  router.push(`/host?event=${event.id}`);
-                }}
-                className="bg-[#508CFF] px-4 py-2 rounded-full text-sm hover:opacity-90 transition"
+            return (
+              <div
+                key={event.id}
+                onClick={() => router.push(`/host?event=${event.id}`)}
+                className="bg-[#191C24] rounded-2xl p-4 border border-white/5 hover:border-[#508CFF]/40 transition cursor-pointer"
               >
-                Enter Event
-              </button>
-            </div>
-          ))}
+                {/* 🔥 TOP ROW */}
+                <div className="flex justify-between items-center mb-2">
+                  <h2 className="text-lg font-semibold">
+                    {event.eventName}
+                  </h2>
+
+                  {/* ✅ STATUS BADGE */}
+                  <span
+                    className={`text-xs px-2 py-1 rounded-full ${
+                      isActive
+                        ? "bg-green-500/20 text-green-400"
+                        : "bg-gray-500/20 text-gray-400"
+                    }`}
+                  >
+                    {isActive ? "Active" : "Idle"}
+                  </span>
+                </div>
+
+                {/* ✅ HOST */}
+                <p className="text-sm text-gray-400 mb-4">
+                  Host: {event.hostName}
+                </p>
+
+                {/* 🔥 FOOTER */}
+                <div className="flex justify-between items-center">
+                  <span className="text-xs text-gray-500">
+                    Tap to manage
+                  </span>
+
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      router.push(`/host?event=${event.id}`);
+                    }}
+                    className="bg-[#508CFF] px-4 py-2 rounded-full text-sm hover:opacity-90 transition"
+                  >
+                    Enter
+                  </button>
+                </div>
+              </div>
+            );
+          })}
         </div>
       )}
     </div>
