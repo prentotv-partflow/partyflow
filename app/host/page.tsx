@@ -1,161 +1,89 @@
 "use client";
 
-export const dynamic = "force-dynamic";
+import { useSearchParams } from "next/navigation";
+import { useEffect, useState } from "react";
 
-import { Suspense, useEffect, useState } from "react";
-import { useSearchParams, useRouter } from "next/navigation";
-import { auth, db } from "../firebase";
-import { doc, getDoc, deleteDoc } from "firebase/firestore";
-import { onAuthStateChanged } from "firebase/auth";
-import { QRCodeCanvas } from "qrcode.react";
-
-type EventType = {
-  eventName: string;
-  hostName: string;
-  hostId: string;
-  hostEmail?: string;
-  createdAt: any;
+// 🔥 TEMP MOCK DATA (replace with Firestore later)
+type Request = {
+  id: string;
+  item: string;
+  user: string;
+  status: "pending" | "preparing" | "ready";
 };
 
-// ✅ ONLY wrapper here
 export default function HostPage() {
-  return (
-    <Suspense fallback={<p>Loading...</p>}>
-      <HostContent />
-    </Suspense>
-  );
-}
-
-// ✅ ALL logic here
-function HostContent() {
   const searchParams = useSearchParams();
   const eventId = searchParams.get("event");
-  const router = useRouter();
 
-  const [authorized, setAuthorized] = useState<boolean | null>(null);
-  const [event, setEvent] = useState<EventType | null>(null);
-  const [eventUrl, setEventUrl] = useState("");
-
-  const [deleting, setDeleting] = useState(false);
-  const [showModal, setShowModal] = useState(false);
-  const [confirmText, setConfirmText] = useState("");
-
-  // ✅ FIXED: ALWAYS USE PRODUCTION DOMAIN
-  useEffect(() => {
-    if (eventId) {
-      const baseUrl = "https://partyflow.vercel.app";
-      const url = `${baseUrl}/event?event=${eventId}`;
-
-      console.log("✅ QR URL:", url); // DEBUG
-
-      setEventUrl(url);
-    }
-  }, [eventId]);
+  const [requests, setRequests] = useState<Request[]>([]);
 
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, async (user) => {
-      if (!user || !eventId) {
-        setAuthorized(false);
-        return;
-      }
-
-      const snap = await getDoc(doc(db, "events", eventId));
-
-      if (!snap.exists()) {
-        console.log("❌ Event not found in Firestore:", eventId);
-        return setAuthorized(false);
-      }
-
-      const data = snap.data() as EventType;
-
-      if (data.hostId === user.uid) {
-        setEvent(data);
-        setAuthorized(true);
-      } else {
-        setAuthorized(false);
-      }
-    });
-
-    return () => unsub();
-  }, [eventId]);
-
-  const handleDelete = async () => {
-    if (!eventId || !event) return;
-    if (confirmText !== event.eventName) return;
-
-    try {
-      setDeleting(true);
-      await deleteDoc(doc(db, "events", eventId));
-      router.push("/my-events");
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setDeleting(false);
-    }
-  };
-
-  if (authorized === null) return <p>Checking access...</p>;
-  if (!authorized) return <p>🚫 Not authorized</p>;
-  if (!event) return <p>Loading...</p>;
+    // 🔥 MOCK DATA FOR NOW
+    setRequests([
+      { id: "1", item: "Vodka Cranberry", user: "Alex", status: "pending" },
+      { id: "2", item: "Rum & Coke", user: "Jordan", status: "preparing" },
+      { id: "3", item: "Tequila Shot", user: "Chris", status: "ready" },
+    ]);
+  }, []);
 
   return (
-    <div style={{ padding: 20 }}>
-      <button onClick={() => router.push("/my-events")}>
-        ← Back
-      </button>
-
-      <h1>Host Dashboard</h1>
-
-      <h2>{event.eventName}</h2>
-      <p>Hosted by: {event.hostName}</p>
-
-      <div style={{ marginTop: "30px", textAlign: "center" }}>
-        <h3>Scan to Join Event</h3>
-
-        {/* ✅ DEBUG (TEMP) */}
-        <p style={{ fontSize: "12px" }}>
-          QR URL: {eventUrl}
+    <div className="min-h-screen bg-[#0A0C12] text-white p-4">
+      
+      {/* 🔥 HEADER */}
+      <div className="mb-6">
+        <h1 className="text-xl font-semibold">Event Queue</h1>
+        <p className="text-sm text-gray-400">
+          Managing event: {eventId}
         </p>
-
-        {eventUrl && <QRCodeCanvas value={eventUrl} size={200} />}
       </div>
 
-      <button onClick={() => setShowModal(true)}>Delete Event</button>
+      {/* 🔥 QUEUE LIST */}
+      <div className="space-y-3">
+        {requests.map((req) => (
+          <div
+            key={req.id}
+            className="bg-[#191C24] p-4 rounded-2xl border border-white/5"
+          >
+            {/* Top Row */}
+            <div className="flex justify-between items-center mb-2">
+              <h2 className="font-medium">{req.item}</h2>
 
-      {showModal && (
-        <div style={modal}>
-          <div style={box}>
-            <p>Type {event.eventName}</p>
-            <input
-              value={confirmText}
-              onChange={(e) => setConfirmText(e.target.value)}
-            />
-            <button onClick={() => setShowModal(false)}>Cancel</button>
-            <button onClick={handleDelete}>
-              {deleting ? "Deleting..." : "Delete"}
-            </button>
+              {/* STATUS */}
+              <span
+                className={`text-xs px-2 py-1 rounded-full ${
+                  req.status === "pending"
+                    ? "bg-yellow-500/20 text-yellow-400"
+                    : req.status === "preparing"
+                    ? "bg-blue-500/20 text-blue-400"
+                    : "bg-green-500/20 text-green-400"
+                }`}
+              >
+                {req.status}
+              </span>
+            </div>
+
+            {/* User */}
+            <p className="text-sm text-gray-400 mb-3">
+              Requested by {req.user}
+            </p>
+
+            {/* ACTION BUTTONS */}
+            <div className="flex gap-2">
+              <button className="bg-blue-500/20 text-blue-400 px-3 py-1 rounded-full text-xs">
+                Prepare
+              </button>
+
+              <button className="bg-green-500/20 text-green-400 px-3 py-1 rounded-full text-xs">
+                Ready
+              </button>
+
+              <button className="bg-red-500/20 text-red-400 px-3 py-1 rounded-full text-xs">
+                Reject
+              </button>
+            </div>
           </div>
-        </div>
-      )}
+        ))}
+      </div>
     </div>
   );
 }
-
-const modal: React.CSSProperties = {
-  position: "fixed",
-  top: 0,
-  left: 0,
-  width: "100%",
-  height: "100%",
-  background: "rgba(0,0,0,0.5)",
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-};
-
-const box: React.CSSProperties = {
-  background: "white",
-  padding: "20px",
-  borderRadius: "8px",
-  width: "300px",
-};
