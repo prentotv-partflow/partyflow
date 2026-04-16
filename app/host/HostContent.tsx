@@ -1,81 +1,408 @@
 "use client";
 
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { db } from "../firebase";
+import {
+  collection,
+  onSnapshot,
+  doc,
+  updateDoc,
+} from "firebase/firestore";
+import useRole from "../hooks/useRole"; // ✅ NEW
 
+// TYPES
 type Request = {
   id: string;
-  item: string;
+  itemName: string;
+  quantity: number;
   user: string;
   status: "pending" | "preparing" | "ready";
+  createdAt?: any;
+};
+
+type AggregatedRequest = {
+  itemName: string;
+  totalQty: number;
+  orderCount: number;
+  requests: Request[];
+  createdAt?: any;
+  status: "pending" | "preparing" | "ready";
+  statusCounts: {
+    pending: number;
+    preparing: number;
+    ready: number;
+  };
 };
 
 export default function HostContent() {
   const searchParams = useSearchParams();
+  const router = useRouter();
+  const role = useRole(); // ✅ NEW
+
   const eventId = searchParams.get("event");
 
   const [requests, setRequests] = useState<Request[]>([]);
+  const [toast, setToast] = useState<string | null>(null);
+
+  // 🔥 NAVIGATION HANDLER
+  const goTo = (path: string) => {
+    if (!eventId) return;
+    router.push(`${path}?event=${eventId}`);
+  };
 
   useEffect(() => {
-    setRequests([
-      { id: "1", item: "Vodka Cranberry", user: "Alex", status: "pending" },
-      { id: "2", item: "Rum & Coke", user: "Jordan", status: "preparing" },
-      { id: "3", item: "Tequila Shot", user: "Chris", status: "ready" },
-    ]);
-  }, []);
+    if (!eventId) return;
+
+    const q = collection(db, "events", eventId, "requests");
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const list: Request[] = [];
+
+      snapshot.forEach((docSnap) => {
+        const data = docSnap.data();
+
+        list.push({
+          id: docSnap.id,
+          itemName: data.itemName || "Unknown Item",
+          quantity: data.quantity || 1,
+          user: data.guestName || "Unknown",
+          status: data.status || "pending",
+          createdAt: data.createdAt,
+        });
+      });
+
+      // FIFO
+      list.sort((a, b) => {
+        const aTime = a.createdAt?.seconds ?? 0;
+        const bTime = b.createdAt?.seconds ?? 0;
+        return aTime - bTime;
+      });
+
+      setRequests(list);
+    });
+
+    return () => unsubscribe();
+  }, [eventId]);
+
+  // AGGREGATION
+  const aggregateRequests = (requests: Request[]): AggregatedRequest[] => {
+    const map = new Map<string, AggregatedRequest>();
+
+    const statusPriority = {
+      pending: 1,
+      preparing: 2,
+      ready: 3,
+    };
+
+    for (const req of requests) {
+      const key = req.itemName.toLowerCase().trim();
+
+      if (!map.has(key)) {
+        map.set(key, {
+          itemName: req.itemName,
+          totalQty: 0,
+          orderCount: 0,
+          requests: [],
+          createdAt: req.createdAt,
+          status: req.status,
+          statusCounts: {
+            pending: 0,
+            preparing: 0,
+            ready: 0,
+          },
+        });
+      }
+
+      const group = map.get(key)!;
+
+      group.totalQty += req.quantity;
+      group.orderCount += 1;
+      group.requests.push(req);
+
+      const reqTime = req.createdAt?.seconds ?? Infinity;
+      const groupTime = group.createdAt?.seconds ?? Infinity;
+
+      if (reqTime < groupTime) {
+        group.createdAt = req.createdAt;
+      }
+
+      group.statusCounts[req.status] += 1;
+
+      if (
+        statusPriority[req.status] <
+        statusPriority[group.status]
+      ) {
+        group.status = req.status;
+      }
+    }
+
+    return Array.from(map.values()).sort((a, b) => {
+      const aTime = a.createdAt?.seconds ?? 0;
+      const bTime = b.createdAt?.seconds ?? 0;
+      return aTime - bTime;
+    });
+  };
+
+  const aggregated = aggregateRequests(requests);
+
+  const showToast = (message: string) => {
+    setToast(message);
+    setTimeout(() => setToast(null), 2000);
+  };
+
+  // ACTIONS
+  const updatePendingToPreparing = async (group: AggregatedRequest) => {
+    if (!eventId) return;
+
+    const targets = group.requests.filter(
+      (r) => r.status === "pending"
+    );
+
+    if (targets.length === 0) {
+      showToast("No pending items");
+      return;
+    }
+
+    await Promise.all(
+      targets.map((req) => {
+        const ref = doc(db, "events", eventId, "requests", req.id);
+        return updateDoc(ref, { status: "preparing" });
+      })
+    );
+
+    showToast(
+      `${targets.length} item${targets.length > 1 ? "s" : ""} moved to preparing`
+    );
+  };
+
+  const updatePreparingToReady = async (group: AggregatedRequest) => {
+    if (!eventId) return;
+
+    const targets = group.requests.filter(
+      (r) => r.status === "preparing"
+    );
+
+    if (targets.length === 0) {
+      showToast("No preparing items");
+      return;
+    }
+
+    await Promise.all(
+      targets.map((req) => {
+        const ref = doc(db, "events", eventId, "requests", req.id);
+        return updateDoc(ref, { status: "ready" });
+      })
+    );
+
+    showToast(
+      `${targets.length} item${targets.length > 1 ? "s" : ""} marked ready`
+    );
+  };
+
+  const resetAllToPending = async (group: AggregatedRequest) => {
+    if (!eventId) return;
+
+    const targets = group.requests.filter(
+      (r) => r.status !== "pending"
+    );
+
+    if (targets.length === 0) {
+      showToast("Nothing to reset");
+      return;
+    }
+
+    await Promise.all(
+      targets.map((req) => {
+        const ref = doc(db, "events", eventId, "requests", req.id);
+        return updateDoc(ref, { status: "pending" });
+      })
+    );
+
+    showToast(
+      `${targets.length} item${targets.length > 1 ? "s" : ""} reset`
+    );
+  };
+
+  const formatTime = (timestamp: any) => {
+    if (!timestamp?.seconds) return "";
+    const date = new Date(timestamp.seconds * 1000);
+    return date.toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  };
 
   return (
-    <div className="min-h-screen bg-[#0A0C12] text-white p-4">
-      
-      <div className="mb-6">
-        <h1 className="text-xl font-semibold">Event Queue</h1>
-        <p className="text-sm text-gray-400">
-          Managing event: {eventId}
-        </p>
-      </div>
+    <div className="min-h-screen bg-[#0A0C12] text-white">
 
-      <div className="space-y-3">
-        {requests.map((req) => (
-          <div
-            key={req.id}
-            className="bg-[#191C24] p-4 rounded-2xl border border-white/5"
+      {/* 🔥 ROLE-AWARE NAV BAR */}
+      <div className="sticky top-0 z-20 bg-[#0A0C12] border-b border-white/5 px-4 py-3 flex justify-between items-center">
+        <h1 className="text-sm font-semibold">PartyFlow Host</h1>
+
+        <div className="flex gap-2 text-xs flex-wrap">
+          {/* ALWAYS AVAILABLE */}
+          <button
+            onClick={() => goTo("/host")}
+            className="px-3 py-1 rounded-full bg-white/10"
           >
-            <div className="flex justify-between items-center mb-2">
-              <h2 className="font-medium">{req.item}</h2>
+            Queue
+          </button>
 
-              <span
-                className={`text-xs px-2 py-1 rounded-full ${
-                  req.status === "pending"
-                    ? "bg-yellow-500/20 text-yellow-400"
-                    : req.status === "preparing"
-                    ? "bg-blue-500/20 text-blue-400"
-                    : "bg-green-500/20 text-green-400"
-                }`}
+          <button
+            onClick={() => goTo("/add-menu")}
+            className="px-3 py-1 rounded-full bg-white/10"
+          >
+            Add Menu
+          </button>
+
+          {/* HOST ONLY */}
+          {role === "host" && (
+            <>
+              <button
+                onClick={() => router.push("/my-events")}
+                className="px-3 py-1 rounded-full bg-white/10"
               >
-                {req.status}
-              </span>
-            </div>
-
-            <p className="text-sm text-gray-400 mb-3">
-              Requested by {req.user}
-            </p>
-
-            <div className="flex gap-2">
-              <button className="bg-blue-500/20 text-blue-400 px-3 py-1 rounded-full text-xs">
-                Prepare
+                Events
               </button>
 
-              <button className="bg-green-500/20 text-green-400 px-3 py-1 rounded-full text-xs">
-                Ready
+              <button
+                onClick={() => router.push("/create-event")}
+                className="px-3 py-1 rounded-full bg-white/10"
+              >
+                Create
               </button>
-
-              <button className="bg-red-500/20 text-red-400 px-3 py-1 rounded-full text-xs">
-                Reject
-              </button>
-            </div>
-          </div>
-        ))}
+            </>
+          )}
+        </div>
       </div>
+
+      <div className="p-4">
+
+        <div className="mb-6">
+          <h1 className="text-xl font-semibold">Event Queue</h1>
+          <p className="text-sm text-gray-400">
+            Managing event: {eventId}
+          </p>
+        </div>
+
+        {aggregated.length === 0 ? (
+          <p className="text-gray-400 text-sm">
+            No requests yet...
+          </p>
+        ) : (
+          <div className="space-y-3">
+            {aggregated.map((group) => {
+              const needsAttention =
+                group.statusCounts.pending > 0;
+
+              const hasPending = group.statusCounts.pending > 0;
+              const hasPreparing = group.statusCounts.preparing > 0;
+              const hasNonPending =
+                group.statusCounts.preparing > 0 ||
+                group.statusCounts.ready > 0;
+
+              return (
+                <div
+                  key={group.itemName.toLowerCase()}
+                  className={`p-4 rounded-2xl border ${
+                    needsAttention
+                      ? "bg-[#191C24] border-yellow-500/40 shadow-[0_0_12px_rgba(234,179,8,0.25)]"
+                      : "bg-[#191C24] border-white/5"
+                  }`}
+                >
+                  <div className="flex justify-between items-start mb-2">
+                    <div>
+                      <h2 className="font-medium flex items-center gap-2">
+                        {group.itemName} (x{group.totalQty})
+                        {needsAttention && (
+                          <span className="text-xs text-yellow-400">
+                            ⚡ Needs attention
+                          </span>
+                        )}
+                      </h2>
+
+                      <p className="text-xs text-gray-500">
+                        {formatTime(group.createdAt)} • {group.orderCount} orders
+                      </p>
+
+                      <p className="text-xs mt-1 space-x-2">
+                        {group.statusCounts.pending > 0 && (
+                          <span className="text-yellow-400">🟡 {group.statusCounts.pending}</span>
+                        )}
+                        {group.statusCounts.preparing > 0 && (
+                          <span className="text-blue-400">🔵 {group.statusCounts.preparing}</span>
+                        )}
+                        {group.statusCounts.ready > 0 && (
+                          <span className="text-green-400">🟢 {group.statusCounts.ready}</span>
+                        )}
+                      </p>
+                    </div>
+
+                    <span
+                      className={`text-xs px-2 py-1 rounded-full ${
+                        group.status === "pending"
+                          ? "bg-yellow-500/20 text-yellow-400"
+                          : group.status === "preparing"
+                          ? "bg-blue-500/20 text-blue-400"
+                          : "bg-green-500/20 text-green-400"
+                      }`}
+                    >
+                      {group.status}
+                    </span>
+                  </div>
+
+                  <div className="flex gap-2 flex-wrap text-xs">
+                    <button
+                      disabled={!hasPending}
+                      onClick={() => updatePendingToPreparing(group)}
+                      className={`px-3 py-1 rounded-full ${
+                        hasPending
+                          ? "bg-blue-500/20 text-blue-400"
+                          : "bg-gray-700 text-gray-500 cursor-not-allowed"
+                      }`}
+                    >
+                      Mark as Preparing
+                    </button>
+
+                    <button
+                      disabled={!hasPreparing}
+                      onClick={() => updatePreparingToReady(group)}
+                      className={`px-3 py-1 rounded-full ${
+                        hasPreparing
+                          ? "bg-green-500/20 text-green-400"
+                          : "bg-gray-700 text-gray-500 cursor-not-allowed"
+                      }`}
+                    >
+                      Mark as Ready
+                    </button>
+
+                    <button
+                      disabled={!hasNonPending}
+                      onClick={() => resetAllToPending(group)}
+                      className={`px-3 py-1 rounded-full ${
+                        hasNonPending
+                          ? "bg-yellow-500/20 text-yellow-400"
+                          : "bg-gray-700 text-gray-500 cursor-not-allowed"
+                      }`}
+                    >
+                      Reset Items
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+      </div>
+
+      {/* TOAST */}
+      {toast && (
+        <div className="fixed bottom-5 left-1/2 -translate-x-1/2 bg-black text-white px-4 py-2 rounded-lg shadow-lg text-sm">
+          {toast}
+        </div>
+      )}
     </div>
   );
 }

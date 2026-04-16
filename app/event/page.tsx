@@ -4,7 +4,7 @@ export const dynamic = "force-dynamic";
 export const fetchCache = "force-no-store";
 
 import { Suspense, useEffect, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 import { db } from "../firebase";
 import { doc, getDoc } from "firebase/firestore";
 
@@ -14,7 +14,6 @@ type EventType = {
   hostId: string;
 };
 
-// ✅ Wrapper
 export default function EventPage() {
   return (
     <Suspense fallback={<p>Loading event...</p>}>
@@ -23,48 +22,35 @@ export default function EventPage() {
   );
 }
 
-// ✅ Logic
 function EventContent() {
   const searchParams = useSearchParams();
+  const router = useRouter();
   const eventId = searchParams.get("event");
-
-  console.log("🔍 EVENT ID FROM URL:", eventId);
 
   const [event, setEvent] = useState<EventType | null>(null);
   const [loading, setLoading] = useState(true);
 
   const [guestName, setGuestName] = useState("");
-  const [guestEntered, setGuestEntered] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
     const fetchEvent = async () => {
       if (!eventId) {
-        console.log("❌ No eventId found in URL");
         setLoading(false);
         return;
       }
 
       try {
-        console.log("📡 Fetching event from Firestore:", eventId);
-
         const ref = doc(db, "events", eventId);
         const snap = await getDoc(ref);
 
-        console.log("📄 Firestore exists?:", snap.exists());
-
         if (!snap.exists()) {
-          console.log("❌ Event NOT FOUND in Firestore");
           setEvent(null);
         } else {
-          const data = snap.data(); // ✅ FIX
-
-          console.log("✅ Event data:", data);
-
-          setEvent(data as EventType); // ✅ FIX
+          setEvent(snap.data() as EventType);
         }
       } catch (err) {
-        console.error("❌ Firestore fetch error:", err);
+        console.error(err);
         setEvent(null);
       } finally {
         setLoading(false);
@@ -86,49 +72,30 @@ function EventContent() {
     }
 
     setError("");
-    setGuestEntered(true);
+
+    // ✅ Redirect with params
+    router.push(`/menu?event=${eventId}&name=${encodeURIComponent(guestName.trim())}`);
   };
 
   if (loading) return <p>Loading event...</p>;
-
-  if (!event) {
-    console.log("🚨 FINAL STATE: Event is NULL");
-    return <p>Event not found</p>;
-  }
-
-  if (!guestEntered) {
-    return (
-      <div style={container}>
-        <h2>Welcome</h2>
-        <p>Enter your name to join:</p>
-
-        <input
-          value={guestName}
-          onChange={(e) => setGuestName(e.target.value)}
-          style={input}
-        />
-
-        {error && <p style={{ color: "red" }}>{error}</p>}
-
-        <button onClick={handleEnter} style={button}>
-          Enter Event
-        </button>
-      </div>
-    );
-  }
+  if (!event) return <p>Event not found</p>;
 
   return (
     <div style={container}>
-      <h1>{event.eventName}</h1>
-      <p>Hosted by: {event.hostName}</p>
+      <h2>Welcome</h2>
+      <p>Enter your name to access:</p>
 
-      <hr style={{ margin: "20px 0" }} />
+      <input
+        value={guestName}
+        onChange={(e) => setGuestName(e.target.value)}
+        style={input}
+      />
 
-      <p>
-        Welcome, <strong>{guestName}</strong> 👋
-      </p>
+      {error && <p style={{ color: "red" }}>{error}</p>}
 
-      <p>🎉 More features coming soon...</p>
+      <button onClick={handleEnter} style={button}>
+        Enter Event
+      </button>
     </div>
   );
 }
