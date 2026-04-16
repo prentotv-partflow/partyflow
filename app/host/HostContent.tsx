@@ -9,7 +9,8 @@ import {
   doc,
   updateDoc,
 } from "firebase/firestore";
-import useRole from "../hooks/useRole"; // ✅ NEW
+import useRole from "../hooks/useRole";
+import { QRCodeCanvas } from "qrcode.react"; // ✅ FIXED
 
 // TYPES
 type Request = {
@@ -38,19 +39,38 @@ type AggregatedRequest = {
 export default function HostContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
-  const role = useRole(); // ✅ NEW
+  const role = useRole();
 
   const eventId = searchParams.get("event");
 
   const [requests, setRequests] = useState<Request[]>([]);
   const [toast, setToast] = useState<string | null>(null);
+  const [origin, setOrigin] = useState("");
 
-  // 🔥 NAVIGATION HANDLER
+  useEffect(() => {
+    setOrigin(window.location.origin);
+  }, []);
+
+  const guestUrl = eventId ? `${origin}/menu?event=${eventId}` : "";
+
+  const showToast = (message: string) => {
+    setToast(message);
+    setTimeout(() => setToast(null), 2000);
+  };
+
+  const copyLink = () => {
+    if (!guestUrl) return;
+    navigator.clipboard.writeText(guestUrl);
+    showToast("Guest link copied");
+  };
+
+  // NAV
   const goTo = (path: string) => {
     if (!eventId) return;
     router.push(`${path}?event=${eventId}`);
   };
 
+  // FETCH REQUESTS
   useEffect(() => {
     if (!eventId) return;
 
@@ -72,7 +92,6 @@ export default function HostContent() {
         });
       });
 
-      // FIFO
       list.sort((a, b) => {
         const aTime = a.createdAt?.seconds ?? 0;
         const bTime = b.createdAt?.seconds ?? 0;
@@ -85,7 +104,7 @@ export default function HostContent() {
     return () => unsubscribe();
   }, [eventId]);
 
-  // AGGREGATION
+  // AGGREGATE
   const aggregateRequests = (requests: Request[]): AggregatedRequest[] => {
     const map = new Map<string, AggregatedRequest>();
 
@@ -146,11 +165,6 @@ export default function HostContent() {
 
   const aggregated = aggregateRequests(requests);
 
-  const showToast = (message: string) => {
-    setToast(message);
-    setTimeout(() => setToast(null), 2000);
-  };
-
   // ACTIONS
   const updatePendingToPreparing = async (group: AggregatedRequest) => {
     if (!eventId) return;
@@ -171,9 +185,7 @@ export default function HostContent() {
       })
     );
 
-    showToast(
-      `${targets.length} item${targets.length > 1 ? "s" : ""} moved to preparing`
-    );
+    showToast(`${targets.length} item(s) preparing`);
   };
 
   const updatePreparingToReady = async (group: AggregatedRequest) => {
@@ -195,9 +207,7 @@ export default function HostContent() {
       })
     );
 
-    showToast(
-      `${targets.length} item${targets.length > 1 ? "s" : ""} marked ready`
-    );
+    showToast(`${targets.length} item(s) ready`);
   };
 
   const resetAllToPending = async (group: AggregatedRequest) => {
@@ -219,9 +229,7 @@ export default function HostContent() {
       })
     );
 
-    showToast(
-      `${targets.length} item${targets.length > 1 ? "s" : ""} reset`
-    );
+    showToast(`${targets.length} item(s) reset`);
   };
 
   const formatTime = (timestamp: any) => {
@@ -236,42 +244,18 @@ export default function HostContent() {
   return (
     <div className="min-h-screen bg-[#0A0C12] text-white">
 
-      {/* 🔥 ROLE-AWARE NAV BAR */}
+      {/* NAV */}
       <div className="sticky top-0 z-20 bg-[#0A0C12] border-b border-white/5 px-4 py-3 flex justify-between items-center">
         <h1 className="text-sm font-semibold">PartyFlow Host</h1>
 
         <div className="flex gap-2 text-xs flex-wrap">
-          {/* ALWAYS AVAILABLE */}
-          <button
-            onClick={() => goTo("/host")}
-            className="px-3 py-1 rounded-full bg-white/10"
-          >
-            Queue
-          </button>
+          <button onClick={() => goTo("/host")} className="px-3 py-1 rounded-full bg-white/10">Queue</button>
+          <button onClick={() => goTo("/add-menu")} className="px-3 py-1 rounded-full bg-white/10">Add Menu</button>
 
-          <button
-            onClick={() => goTo("/add-menu")}
-            className="px-3 py-1 rounded-full bg-white/10"
-          >
-            Add Menu
-          </button>
-
-          {/* HOST ONLY */}
           {role === "host" && (
             <>
-              <button
-                onClick={() => router.push("/my-events")}
-                className="px-3 py-1 rounded-full bg-white/10"
-              >
-                Events
-              </button>
-
-              <button
-                onClick={() => router.push("/create-event")}
-                className="px-3 py-1 rounded-full bg-white/10"
-              >
-                Create
-              </button>
+              <button onClick={() => router.push("/my-events")} className="px-3 py-1 rounded-full bg-white/10">Events</button>
+              <button onClick={() => router.push("/create-event")} className="px-3 py-1 rounded-full bg-white/10">Create</button>
             </>
           )}
         </div>
@@ -279,6 +263,34 @@ export default function HostContent() {
 
       <div className="p-4">
 
+        {/* QR SECTION */}
+        {eventId && origin && (
+          <div className="mb-6 p-4 bg-[#191C24] rounded-2xl border border-white/5">
+            <p className="text-xs text-gray-400 mb-2">Guest Access</p>
+
+            <div className="flex flex-col items-center gap-3">
+              <QRCodeCanvas
+                value={guestUrl}
+                size={140}
+                bgColor="#0A0C12"
+                fgColor="#ffffff"
+              />
+
+              <p className="text-[10px] text-gray-500 text-center break-all">
+                {guestUrl}
+              </p>
+
+              <button
+                onClick={copyLink}
+                className="text-xs px-3 py-1 rounded-full bg-white/10"
+              >
+                Copy Link
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* HEADER */}
         <div className="mb-6">
           <h1 className="text-xl font-semibold">Event Queue</h1>
           <p className="text-sm text-gray-400">
@@ -286,16 +298,12 @@ export default function HostContent() {
           </p>
         </div>
 
+        {/* LIST */}
         {aggregated.length === 0 ? (
-          <p className="text-gray-400 text-sm">
-            No requests yet...
-          </p>
+          <p className="text-gray-400 text-sm">No requests yet...</p>
         ) : (
           <div className="space-y-3">
             {aggregated.map((group) => {
-              const needsAttention =
-                group.statusCounts.pending > 0;
-
               const hasPending = group.statusCounts.pending > 0;
               const hasPreparing = group.statusCounts.preparing > 0;
               const hasNonPending =
@@ -305,88 +313,35 @@ export default function HostContent() {
               return (
                 <div
                   key={group.itemName.toLowerCase()}
-                  className={`p-4 rounded-2xl border ${
-                    needsAttention
-                      ? "bg-[#191C24] border-yellow-500/40 shadow-[0_0_12px_rgba(234,179,8,0.25)]"
-                      : "bg-[#191C24] border-white/5"
-                  }`}
+                  className="p-4 rounded-2xl border bg-[#191C24] border-white/5"
                 >
-                  <div className="flex justify-between items-start mb-2">
-                    <div>
-                      <h2 className="font-medium flex items-center gap-2">
-                        {group.itemName} (x{group.totalQty})
-                        {needsAttention && (
-                          <span className="text-xs text-yellow-400">
-                            ⚡ Needs attention
-                          </span>
-                        )}
-                      </h2>
+                  <h2 className="font-medium mb-2">
+                    {group.itemName} (x{group.totalQty})
+                  </h2>
 
-                      <p className="text-xs text-gray-500">
-                        {formatTime(group.createdAt)} • {group.orderCount} orders
-                      </p>
-
-                      <p className="text-xs mt-1 space-x-2">
-                        {group.statusCounts.pending > 0 && (
-                          <span className="text-yellow-400">🟡 {group.statusCounts.pending}</span>
-                        )}
-                        {group.statusCounts.preparing > 0 && (
-                          <span className="text-blue-400">🔵 {group.statusCounts.preparing}</span>
-                        )}
-                        {group.statusCounts.ready > 0 && (
-                          <span className="text-green-400">🟢 {group.statusCounts.ready}</span>
-                        )}
-                      </p>
-                    </div>
-
-                    <span
-                      className={`text-xs px-2 py-1 rounded-full ${
-                        group.status === "pending"
-                          ? "bg-yellow-500/20 text-yellow-400"
-                          : group.status === "preparing"
-                          ? "bg-blue-500/20 text-blue-400"
-                          : "bg-green-500/20 text-green-400"
-                      }`}
-                    >
-                      {group.status}
-                    </span>
-                  </div>
-
-                  <div className="flex gap-2 flex-wrap text-xs">
+                  <div className="flex gap-2 text-xs flex-wrap">
                     <button
                       disabled={!hasPending}
                       onClick={() => updatePendingToPreparing(group)}
-                      className={`px-3 py-1 rounded-full ${
-                        hasPending
-                          ? "bg-blue-500/20 text-blue-400"
-                          : "bg-gray-700 text-gray-500 cursor-not-allowed"
-                      }`}
+                      className="px-3 py-1 rounded-full bg-blue-500/20 text-blue-400"
                     >
-                      Mark as Preparing
+                      Preparing
                     </button>
 
                     <button
                       disabled={!hasPreparing}
                       onClick={() => updatePreparingToReady(group)}
-                      className={`px-3 py-1 rounded-full ${
-                        hasPreparing
-                          ? "bg-green-500/20 text-green-400"
-                          : "bg-gray-700 text-gray-500 cursor-not-allowed"
-                      }`}
+                      className="px-3 py-1 rounded-full bg-green-500/20 text-green-400"
                     >
-                      Mark as Ready
+                      Ready
                     </button>
 
                     <button
                       disabled={!hasNonPending}
                       onClick={() => resetAllToPending(group)}
-                      className={`px-3 py-1 rounded-full ${
-                        hasNonPending
-                          ? "bg-yellow-500/20 text-yellow-400"
-                          : "bg-gray-700 text-gray-500 cursor-not-allowed"
-                      }`}
+                      className="px-3 py-1 rounded-full bg-yellow-500/20 text-yellow-400"
                     >
-                      Reset Items
+                      Reset
                     </button>
                   </div>
                 </div>
@@ -394,12 +349,11 @@ export default function HostContent() {
             })}
           </div>
         )}
-
       </div>
 
       {/* TOAST */}
       {toast && (
-        <div className="fixed bottom-5 left-1/2 -translate-x-1/2 bg-black text-white px-4 py-2 rounded-lg shadow-lg text-sm">
+        <div className="fixed bottom-5 left-1/2 -translate-x-1/2 bg-black px-4 py-2 rounded-lg text-sm">
           {toast}
         </div>
       )}
