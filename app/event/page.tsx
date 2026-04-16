@@ -1,118 +1,77 @@
 "use client";
 
-export const dynamic = "force-dynamic";
-export const fetchCache = "force-no-store";
-
-import { Suspense, useEffect, useState } from "react";
+import { useState, useEffect } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
-import { db } from "../firebase";
-import { doc, getDoc } from "firebase/firestore";
 
-type EventType = {
-  eventName: string;
-  hostName: string;
-  hostId: string;
-};
-
-export default function EventPage() {
-  return (
-    <Suspense fallback={<p>Loading event...</p>}>
-      <EventContent />
-    </Suspense>
-  );
-}
-
-function EventContent() {
+export default function EventEntryPage() {
   const searchParams = useSearchParams();
   const router = useRouter();
-  const eventId = searchParams.get("event");
 
-  const [event, setEvent] = useState<EventType | null>(null);
-  const [loading, setLoading] = useState(true);
+  const eventId = searchParams.get("event");
 
   const [guestName, setGuestName] = useState("");
   const [error, setError] = useState("");
 
+  // ✅ If no eventId, block entry (safety)
   useEffect(() => {
-    const fetchEvent = async () => {
-      if (!eventId) {
-        setLoading(false);
-        return;
-      }
-
-      try {
-        const ref = doc(db, "events", eventId);
-        const snap = await getDoc(ref);
-
-        if (!snap.exists()) {
-          setEvent(null);
-        } else {
-          setEvent(snap.data() as EventType);
-        }
-      } catch (err) {
-        console.error(err);
-        setEvent(null);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchEvent();
+    if (!eventId) {
+      console.error("❌ Missing eventId in /event route");
+    }
   }, [eventId]);
 
-  const handleEnter = () => {
-    if (guestName.trim() === "") {
+  const handleJoin = () => {
+    if (!guestName.trim()) {
       setError("Please enter your name");
       return;
     }
 
-    if (!/^[A-Za-z\s]+$/.test(guestName)) {
-      setError("Only letters and spaces allowed");
+    if (!eventId) {
+      setError("Invalid event");
       return;
     }
 
-    setError("");
+    const cleanName = guestName.trim();
 
-    // ✅ Redirect with params
-    router.push(`/menu?event=${eventId}&name=${encodeURIComponent(guestName.trim())}`);
+    // ✅ Persist guest identity
+    localStorage.setItem("guestName", cleanName);
+
+    // ✅ CRITICAL: Preserve eventId in redirect
+    router.push(`/menu?event=${eventId}&name=${encodeURIComponent(cleanName)}`);
   };
 
-  if (loading) return <p>Loading event...</p>;
-  if (!event) return <p>Event not found</p>;
-
   return (
-    <div style={container}>
-      <h2>Welcome</h2>
-      <p>Enter your name to access:</p>
+    <div className="min-h-screen flex items-center justify-center bg-gray-100 px-4">
+      <div className="bg-white p-6 rounded-2xl shadow-md w-full max-w-sm space-y-4">
+        
+        <h1 className="text-xl font-semibold text-center">
+          Join Event 🎉
+        </h1>
 
-      <input
-        value={guestName}
-        onChange={(e) => setGuestName(e.target.value)}
-        style={input}
-      />
+        <input
+          type="text"
+          placeholder="Enter your name"
+          value={guestName}
+          onChange={(e) => {
+            setGuestName(e.target.value);
+            setError("");
+          }}
+          className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-black"
+        />
 
-      {error && <p style={{ color: "red" }}>{error}</p>}
+        {error && (
+          <p className="text-red-500 text-xs text-center">
+            {error}
+          </p>
+        )}
 
-      <button onClick={handleEnter} style={button}>
-        Enter Event
-      </button>
+        <button
+          onClick={handleJoin}
+          className="w-full bg-black text-white py-2 rounded-lg text-sm"
+        >
+          Enter Event
+        </button>
+
+      </div>
     </div>
   );
 }
-
-const container = {
-  padding: "20px",
-  textAlign: "center" as const,
-};
-
-const input = {
-  padding: "10px",
-  width: "250px",
-  marginTop: "10px",
-};
-
-const button = {
-  marginTop: "15px",
-  padding: "10px 20px",
-  cursor: "pointer",
-};
