@@ -1,7 +1,7 @@
 "use client";
 
 import { Suspense, useState, useEffect } from "react";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 import { db } from "../firebase";
 import {
   collection,
@@ -29,6 +29,8 @@ type RequestItem = {
 
 function MenuContent() {
   const searchParams = useSearchParams();
+  const router = useRouter();
+
   const eventId = searchParams.get("event");
   const nameFromUrl = searchParams.get("name");
 
@@ -40,17 +42,37 @@ function MenuContent() {
   const [loadingItem, setLoadingItem] = useState<string | null>(null);
 
   const [toast, setToast] = useState<string | null>(null);
+  const [checkingAuth, setCheckingAuth] = useState(true);
 
-  // ✅ Initialize guest name
+  // ✅ AUTH GATE (CRITICAL FIX)
   useEffect(() => {
+    if (!eventId) return;
+
+    const storedName = localStorage.getItem("guestName");
+
+    // Priority:
+    // 1. URL param
+    // 2. localStorage
     if (nameFromUrl) {
+      localStorage.setItem("guestName", nameFromUrl);
       setGuestName(nameFromUrl);
+      setCheckingAuth(false);
+      return;
     }
-  }, [nameFromUrl]);
+
+    if (storedName) {
+      setGuestName(storedName);
+      setCheckingAuth(false);
+      return;
+    }
+
+    // ❌ No identity → redirect to entry screen
+    router.push(`/event?event=${eventId}`);
+  }, [eventId, nameFromUrl, router]);
 
   // 🔥 Load menu + guestId
   useEffect(() => {
-    if (!eventId) return;
+    if (!eventId || checkingAuth) return;
 
     const unsubscribe = onSnapshot(
       collection(db, "events", eventId, "menu"),
@@ -60,7 +82,6 @@ function MenuContent() {
           ...(doc.data() as Omit<MenuItem, "id">),
         }));
 
-        // ✅ Alphabetical sort
         items.sort((a, b) =>
           a.name.toLowerCase().localeCompare(b.name.toLowerCase())
         );
@@ -69,6 +90,7 @@ function MenuContent() {
       }
     );
 
+    // ✅ Guest ID (persistent per device)
     const storedId = localStorage.getItem("guestId");
     if (storedId) {
       setGuestId(storedId);
@@ -79,11 +101,11 @@ function MenuContent() {
     }
 
     return () => unsubscribe();
-  }, [eventId]);
+  }, [eventId, checkingAuth]);
 
   // 🔥 Listen to THIS guest's requests
   useEffect(() => {
-    if (!eventId || !guestId) return;
+    if (!eventId || !guestId || checkingAuth) return;
 
     const unsubscribe = onSnapshot(
       collection(db, "events", eventId, "requests"),
@@ -101,7 +123,6 @@ function MenuContent() {
           }
         });
 
-        // ✅ Alphabetical + stable
         list.sort((a, b) => {
           const nameCompare = a.itemName
             .toLowerCase()
@@ -120,9 +141,9 @@ function MenuContent() {
     );
 
     return () => unsubscribe();
-  }, [eventId, guestId]);
+  }, [eventId, guestId, checkingAuth]);
 
-  // 🔥 Request handler (FIXED)
+  // 🔥 Request handler
   const handleRequest = async (item: MenuItem) => {
     if (!guestName.trim()) {
       setToast("❌ Missing guest name");
@@ -152,7 +173,6 @@ function MenuContent() {
         const currentQty = itemDoc.data().qty;
         if (currentQty <= 0) throw new Error("Out of stock");
 
-        // ✅ ALWAYS CREATE NEW REQUEST
         const requestRef = doc(requestsRef);
 
         transaction.set(requestRef, {
@@ -165,7 +185,6 @@ function MenuContent() {
           createdAt: serverTimestamp(),
         });
 
-        // ✅ Deduct inventory
         transaction.update(itemRef, {
           qty: currentQty - 1,
         });
@@ -173,7 +192,6 @@ function MenuContent() {
 
       setToast(`✅ ${item.name} added`);
       setTimeout(() => setToast(null), 2000);
-
     } catch (error: any) {
       console.error("❌ REQUEST ERROR:", error);
 
@@ -184,9 +202,17 @@ function MenuContent() {
     }
   };
 
+  // ⛔ Block UI until auth resolved
+  if (checkingAuth) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <p className="text-sm text-gray-500">Entering event...</p>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gray-100 flex flex-col">
-      
       <div className="bg-white p-4 shadow-sm sticky top-0 z-10">
         <h1 className="text-lg font-semibold text-center">
           Party Menu 🍽️
@@ -194,7 +220,6 @@ function MenuContent() {
       </div>
 
       <div className="flex-1 p-4 space-y-4 max-w-md w-full mx-auto">
-
         {/* MENU */}
         <div className="space-y-3">
           {menu.map((item) => (
@@ -211,10 +236,7 @@ function MenuContent() {
 
               <button
                 onClick={() => handleRequest(item)}
-                disabled={
-                  loadingItem === item.id ||
-                  item.qty === 0
-                }
+                disabled={loadingItem === item.id || item.qty === 0}
                 className={`px-4 py-2 rounded-lg text-sm ${
                   item.qty === 0
                     ? "bg-gray-300 text-gray-500"
@@ -251,7 +273,6 @@ function MenuContent() {
             </ul>
           )}
         </div>
-
       </div>
 
       {/* 🔔 TOAST */}
