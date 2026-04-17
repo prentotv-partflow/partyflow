@@ -5,13 +5,14 @@ export default function Home() {
       <div className="text-center">
         <h1 className="text-4xl font-bold mb-4">PartyFlow</h1>
         <p className="text-lg mb-6">
-          Plan. Invite. Celebrate.
+          Order. Flow. Enjoy.
         </p>
 
-        <Link href="/login">
-  <button className="bg-white text-black px-6 py-3 rounded-full font-semibold">
-    Get Started
-  </button>
+        <Link
+  href="/login"
+  className="bg-white text-black px-6 py-3 rounded-full font-semibold inline-block"
+>
+  Get Started
 </Link>
 
       </div>
