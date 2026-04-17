@@ -1,62 +1,56 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { onAuthStateChanged, signInWithPopup, GoogleAuthProvider } from "firebase/auth";
-import { auth } from "../firebase";
+import { onAuthStateChanged } from "firebase/auth";
+import { auth, db } from "../firebase";
+import { collection, addDoc, serverTimestamp } from "firebase/firestore";
 
 export default function LoginPage() {
   const router = useRouter();
-  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      console.log("USER STATE:", user?.uid);
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      console.log("USER:", user?.uid);
 
-      if (user) {
-        router.push("/host");
-      } else {
-        setLoading(false); // show login button
+      if (!user) {
+        console.log("No user logged in");
+        return;
+      }
+
+      try {
+        // ✅ CREATE EVENT
+        const eventRef = await addDoc(collection(db, "events"), {
+          hostId: user.uid,
+          createdAt: serverTimestamp(),
+        });
+
+        const eventId = eventRef.id;
+
+        console.log("EVENT CREATED:", eventId);
+
+        // ✅ REDIRECT WITH EVENT ID
+        router.push(`/host?event=${eventId}`);
+      } catch (error) {
+        console.error("EVENT CREATION FAILED:", error);
       }
     });
 
     return () => unsubscribe();
   }, [router]);
 
-  const handleLogin = async () => {
-    try {
-      const provider = new GoogleAuthProvider();
-      await signInWithPopup(auth, provider);
-      // redirect handled by onAuthStateChanged
-    } catch (error) {
-      console.error("LOGIN ERROR:", error);
-    }
-  };
-
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-100 px-4">
-        <div className="bg-white p-6 rounded-2xl shadow-md w-full max-w-sm text-center space-y-2">
-          <h1 className="text-lg font-semibold">Login</h1>
-          <p className="text-sm text-gray-600">
-            Checking authentication...
-          </p>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-100 px-4">
-      <div className="bg-white p-6 rounded-2xl shadow-md w-full max-w-sm text-center space-y-4">
+      <div className="bg-white p-6 rounded-2xl shadow-md w-full max-w-sm text-center space-y-2">
         <h1 className="text-lg font-semibold">Login</h1>
 
-        <button
-          onClick={handleLogin}
-          className="w-full bg-black text-white py-2 rounded-lg"
-        >
-          Sign in with Google
-        </button>
+        <p className="text-sm text-gray-600">
+          Creating your event...
+        </p>
+
+        <p className="text-xs text-gray-400">
+          Redirecting to host dashboard...
+        </p>
       </div>
     </div>
   );
