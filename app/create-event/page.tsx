@@ -1,7 +1,7 @@
 "use client";
 
 import { db, auth } from "../firebase";
-import { collection, addDoc } from "firebase/firestore";
+import { collection, addDoc, serverTimestamp } from "firebase/firestore";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
@@ -13,14 +13,11 @@ export default function CreateEvent() {
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async () => {
-    console.log("🔥 BUTTON CLICKED");
-
     if (!eventName.trim() || !hostName.trim()) {
       alert("Please fill in all fields");
       return;
     }
 
-    // ⭐ GET CURRENT USER
     const user = auth.currentUser;
 
     if (!user) {
@@ -31,8 +28,6 @@ export default function CreateEvent() {
     try {
       setLoading(true);
 
-      console.log("🔥 Sending to Firebase...");
-
       const docRef = await addDoc(collection(db, "events"), {
         eventName: eventName.trim(),
         hostName: hostName.trim(),
@@ -41,23 +36,22 @@ export default function CreateEvent() {
         hostId: user.uid,
         hostEmail: user.email,
 
-        // 🔐 ROLE SYSTEM (FOUNDATION)
+        // ✅ CONSISTENT ROLE SYSTEM
         roles: {
-          [user.uid]: "admin", // 👈 Host gets full access
+          [user.uid]: "host",
         },
 
-        createdAt: new Date(),
+        // ✅ CONSISTENT TIMESTAMP
+        createdAt: serverTimestamp(),
       });
 
       const eventId = docRef.id;
 
-      console.log("✅ Event created with ID:", eventId);
-
-      // ✅ Use router (cleaner navigation)
+      // ✅ STANDARDIZED NAVIGATION
       router.push(`/host?event=${eventId}`);
 
     } catch (error) {
-      console.error("❌ Error creating event:", error);
+      console.error("Error creating event:", error);
       alert("Something went wrong. Please try again.");
     } finally {
       setLoading(false);
@@ -67,7 +61,7 @@ export default function CreateEvent() {
   return (
     <div className="min-h-screen bg-gray-100 flex flex-col">
 
-      {/* 🔥 SIMPLE NAV (HOST LEVEL) */}
+      {/* SIMPLE HEADER */}
       <div className="sticky top-0 bg-black text-white px-4 py-3 text-sm font-semibold">
         PartyFlow — Create Event
       </div>

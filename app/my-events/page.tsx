@@ -2,10 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { db, auth } from "../firebase";
-import {
-  collection,
-  getDocs,
-} from "firebase/firestore";
+import { collection, getDocs } from "firebase/firestore";
 import { onAuthStateChanged, User } from "firebase/auth";
 import { useRouter } from "next/navigation";
 
@@ -16,13 +13,15 @@ type EventType = {
   hostName: string;
   hostId: string;
   hostEmail?: string;
-  roles?: Record<string, string>; // 🔥 NEW
-  createdAt: any;
+  roles?: Record<string, string>;
+  createdAt?: any;
 };
 
 export default function MyEvents() {
   const [user, setUser] = useState<User | null>(null);
   const [events, setEvents] = useState<EventType[]>([]);
+  const [loading, setLoading] = useState(true);
+
   const router = useRouter();
 
   useEffect(() => {
@@ -34,52 +33,64 @@ export default function MyEvents() {
 
       setUser(currentUser);
 
-      // 🔥 GET ALL EVENTS (we filter client-side for flexibility)
-      const snapshot = await getDocs(collection(db, "events"));
+      try {
+        const snapshot = await getDocs(collection(db, "events"));
 
-      const eventsList: EventType[] = snapshot.docs
-        .map((doc) => ({
-          id: doc.id,
-          ...(doc.data() as Omit<EventType, "id">),
-        }))
-        .filter((event) => {
-          // ✅ USER IS HOST
-          if (event.hostId === currentUser.uid) return true;
+        const eventsList: EventType[] = snapshot.docs
+          .map((doc) => ({
+            id: doc.id,
+            ...(doc.data() as Omit<EventType, "id">),
+          }))
+          .filter((event) => {
+            // ✅ HOST
+            if (event.hostId === currentUser.uid) return true;
 
-          // ✅ USER HAS ROLE ACCESS
-          if (event.roles && event.roles[currentUser.uid]) return true;
+            // ✅ ROLE ACCESS
+            if (event.roles?.[currentUser.uid]) return true;
 
-          return false;
+            return false;
+          });
+
+        // ✅ CONSISTENT TIMESTAMP SORT (Firestore-safe)
+        eventsList.sort((a, b) => {
+          const aTime = a.createdAt?.seconds ?? 0;
+          const bTime = b.createdAt?.seconds ?? 0;
+          return bTime - aTime;
         });
 
-      // ✅ Sort newest first (better UX)
-      eventsList.sort((a, b) => {
-        const aTime = a.createdAt?.seconds ?? 0;
-        const bTime = b.createdAt?.seconds ?? 0;
-        return bTime - aTime;
-      });
+        setEvents(eventsList);
 
-      setEvents(eventsList);
+      } catch (error) {
+        console.error("Error fetching events:", error);
+      } finally {
+        setLoading(false);
+      }
     });
 
     return () => unsubscribe();
   }, [router]);
 
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-[#0A0C12] text-white flex items-center justify-center">
+        Loading events...
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-[#0A0C12] text-white">
 
-      {/* 🔥 NAV BAR */}
+      {/* NAV BAR */}
       <div className="sticky top-0 z-20 bg-[#0A0C12] border-b border-white/5 px-4 py-3 flex justify-between items-center">
         <h1 className="text-sm font-semibold">PartyFlow</h1>
 
-        <div className="flex gap-2 text-xs">
-          <button
-            onClick={() => router.push("/create-event")}
-            className="px-3 py-1 rounded-full bg-white/10"
-          >
-            Create Event
-          </button>
-        </div>
+        <button
+          onClick={() => router.push("/create-event")}
+          className="px-3 py-1 rounded-full bg-white/10 text-xs"
+        >
+          Create Event
+        </button>
       </div>
 
       <div className="p-4">
@@ -96,10 +107,9 @@ export default function MyEvents() {
           </div>
         ) : (
 
-          /* EVENT LIST */
           <div className="space-y-4">
             {events.map((event) => {
-              const isActive = true;
+              const isHost = event.hostId === user?.uid;
 
               return (
                 <div
@@ -113,14 +123,8 @@ export default function MyEvents() {
                       {event.eventName}
                     </h2>
 
-                    <span
-                      className={`text-xs px-2 py-1 rounded-full ${
-                        isActive
-                          ? "bg-green-500/20 text-green-400"
-                          : "bg-gray-500/20 text-gray-400"
-                      }`}
-                    >
-                      {isActive ? "Active" : "Idle"}
+                    <span className="text-xs px-2 py-1 rounded-full bg-green-500/20 text-green-400">
+                      Active
                     </span>
                   </div>
 
@@ -129,16 +133,14 @@ export default function MyEvents() {
                     Host: {event.hostName}
                   </p>
 
-                  {/* ROLE LABEL (NEW) */}
-                  {event.hostId === user?.uid ? (
-                    <p className="text-xs text-blue-400 mb-2">
-                      You are the host
-                    </p>
-                  ) : (
-                    <p className="text-xs text-purple-400 mb-2">
-                      Staff access
-                    </p>
-                  )}
+                  {/* ROLE */}
+                  <p
+                    className={`text-xs mb-2 ${
+                      isHost ? "text-blue-400" : "text-purple-400"
+                    }`}
+                  >
+                    {isHost ? "You are the host" : "Staff access"}
+                  </p>
 
                   {/* FOOTER */}
                   <div className="flex justify-between items-center">

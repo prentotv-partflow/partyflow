@@ -11,7 +11,7 @@ import {
   runTransaction,
 } from "firebase/firestore";
 
-// ✅ TYPES
+// TYPES
 type MenuItem = {
   id: string;
   name: string;
@@ -44,15 +44,19 @@ function MenuContent() {
   const [toast, setToast] = useState<string | null>(null);
   const [checkingAuth, setCheckingAuth] = useState(true);
 
-  // ✅ AUTH GATE (CRITICAL FIX)
-  useEffect(() => {
-    if (!eventId) return;
+  // 🚨 HARD FAIL
+  if (!eventId) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#0A0C12] text-white">
+        Invalid event link
+      </div>
+    );
+  }
 
+  // 🔐 AUTH GATE
+  useEffect(() => {
     const storedName = localStorage.getItem("guestName");
 
-    // Priority:
-    // 1. URL param
-    // 2. localStorage
     if (nameFromUrl) {
       localStorage.setItem("guestName", nameFromUrl);
       setGuestName(nameFromUrl);
@@ -66,13 +70,12 @@ function MenuContent() {
       return;
     }
 
-    // ❌ No identity → redirect to entry screen
     router.push(`/event?event=${eventId}`);
   }, [eventId, nameFromUrl, router]);
 
-  // 🔥 Load menu + guestId
+  // 🔥 MENU LISTENER + GUEST ID
   useEffect(() => {
-    if (!eventId || checkingAuth) return;
+    if (checkingAuth) return;
 
     const unsubscribe = onSnapshot(
       collection(db, "events", eventId, "menu"),
@@ -90,7 +93,6 @@ function MenuContent() {
       }
     );
 
-    // ✅ Guest ID (persistent per device)
     const storedId = localStorage.getItem("guestId");
     if (storedId) {
       setGuestId(storedId);
@@ -103,9 +105,9 @@ function MenuContent() {
     return () => unsubscribe();
   }, [eventId, checkingAuth]);
 
-  // 🔥 Listen to THIS guest's requests
+  // 🔥 REQUEST LISTENER (THIS USER ONLY)
   useEffect(() => {
-    if (!eventId || !guestId || checkingAuth) return;
+    if (!guestId || checkingAuth) return;
 
     const unsubscribe = onSnapshot(
       collection(db, "events", eventId, "requests"),
@@ -116,10 +118,7 @@ function MenuContent() {
           const data = docSnap.data() as Omit<RequestItem, "id">;
 
           if (data.guestId === guestId) {
-            list.push({
-              ...data,
-              id: docSnap.id,
-            });
+            list.push({ ...data, id: docSnap.id });
           }
         });
 
@@ -143,20 +142,9 @@ function MenuContent() {
     return () => unsubscribe();
   }, [eventId, guestId, checkingAuth]);
 
-  // 🔥 Request handler
+  // 🔥 REQUEST ACTION
   const handleRequest = async (item: MenuItem) => {
-    if (!guestName.trim()) {
-      setToast("❌ Missing guest name");
-      setTimeout(() => setToast(null), 2000);
-      return;
-    }
-
-    if (!eventId) {
-      setToast("❌ Missing event ID");
-      setTimeout(() => setToast(null), 2000);
-      return;
-    }
-
+    if (!guestName.trim()) return showToast("❌ Missing name");
     if (loadingItem) return;
 
     setLoadingItem(item.id);
@@ -165,54 +153,55 @@ function MenuContent() {
       const itemRef = doc(db, "events", eventId, "menu", item.id);
       const requestsRef = collection(db, "events", eventId, "requests");
 
-      await runTransaction(db, async (transaction) => {
-        const itemDoc = await transaction.get(itemRef);
+      await runTransaction(db, async (tx) => {
+        const snap = await tx.get(itemRef);
+        if (!snap.exists()) throw new Error("Item missing");
 
-        if (!itemDoc.exists()) throw new Error("Item missing");
-
-        const currentQty = itemDoc.data().qty;
+        const currentQty = snap.data().qty;
         if (currentQty <= 0) throw new Error("Out of stock");
 
         const requestRef = doc(requestsRef);
 
-        transaction.set(requestRef, {
+        tx.set(requestRef, {
           eventId,
           guestId,
-          guestName: guestName.trim(),
+          guestName,
           itemName: item.name,
           quantity: 1,
           status: "pending",
           createdAt: serverTimestamp(),
         });
 
-        transaction.update(itemRef, {
-          qty: currentQty - 1,
-        });
+        tx.update(itemRef, { qty: currentQty - 1 });
       });
 
-      setToast(`✅ ${item.name} added`);
-      setTimeout(() => setToast(null), 2000);
-    } catch (error: any) {
-      console.error("❌ REQUEST ERROR:", error);
+      showToast(`✅ ${item.name} added`);
 
-      setToast(`❌ ${error.message || "Failed"}`);
-      setTimeout(() => setToast(null), 2000);
+    } catch (err: any) {
+      console.error(err);
+      showToast(`❌ ${err.message || "Failed"}`);
     } finally {
       setLoadingItem(null);
     }
   };
 
-  // ⛔ Block UI until auth resolved
+  const showToast = (msg: string) => {
+    setToast(msg);
+    setTimeout(() => setToast(null), 2000);
+  };
+
+  // ⛔ WAIT FOR AUTH
   if (checkingAuth) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <p className="text-sm text-gray-500">Entering event...</p>
+      <div className="min-h-screen flex items-center justify-center bg-[#0A0C12] text-white">
+        Entering event...
       </div>
     );
   }
 
   return (
     <div className="min-h-screen bg-gray-100 flex flex-col">
+
       <div className="bg-white p-4 shadow-sm sticky top-0 z-10">
         <h1 className="text-lg font-semibold text-center">
           Party Menu 🍽️
@@ -220,40 +209,47 @@ function MenuContent() {
       </div>
 
       <div className="flex-1 p-4 space-y-4 max-w-md w-full mx-auto">
+
         {/* MENU */}
-        <div className="space-y-3">
-          {menu.map((item) => (
-            <div
-              key={item.id}
-              className="bg-white p-4 rounded-xl shadow-sm flex justify-between"
-            >
-              <div>
-                <p className="font-semibold">{item.name}</p>
-                <p className="text-xs text-gray-500">
-                  {item.qty} available
-                </p>
-              </div>
-
-              <button
-                onClick={() => handleRequest(item)}
-                disabled={loadingItem === item.id || item.qty === 0}
-                className={`px-4 py-2 rounded-lg text-sm ${
-                  item.qty === 0
-                    ? "bg-gray-300 text-gray-500"
-                    : "bg-black text-white"
-                }`}
+        {menu.length === 0 ? (
+          <p className="text-center text-gray-400 text-sm">
+            No items available
+          </p>
+        ) : (
+          <div className="space-y-3">
+            {menu.map((item) => (
+              <div
+                key={item.id}
+                className="bg-white p-4 rounded-xl shadow-sm flex justify-between"
               >
-                {item.qty === 0
-                  ? "Out"
-                  : loadingItem === item.id
-                  ? "..."
-                  : "Request"}
-              </button>
-            </div>
-          ))}
-        </div>
+                <div>
+                  <p className="font-semibold">{item.name}</p>
+                  <p className="text-xs text-gray-500">
+                    {item.qty} available
+                  </p>
+                </div>
 
-        {/* 🛒 YOUR REQUESTS */}
+                <button
+                  onClick={() => handleRequest(item)}
+                  disabled={loadingItem === item.id || item.qty === 0}
+                  className={`px-4 py-2 rounded-lg text-sm ${
+                    item.qty === 0
+                      ? "bg-gray-300 text-gray-500"
+                      : "bg-black text-white"
+                  }`}
+                >
+                  {item.qty === 0
+                    ? "Out"
+                    : loadingItem === item.id
+                    ? "..."
+                    : "Request"}
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* REQUESTS */}
         <div className="bg-white p-4 rounded-xl shadow-sm">
           <h2 className="font-semibold mb-2 text-sm">
             Your Requests
@@ -275,7 +271,7 @@ function MenuContent() {
         </div>
       </div>
 
-      {/* 🔔 TOAST */}
+      {/* TOAST */}
       {toast && (
         <div className="fixed bottom-5 left-1/2 -translate-x-1/2 bg-black text-white px-4 py-2 rounded-lg shadow-lg text-sm">
           {toast}

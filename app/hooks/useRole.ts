@@ -1,18 +1,51 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { doc, getDoc } from "firebase/firestore";
+import { auth, db } from "../firebase";
 
-export default function useRole() {
-  const [role, setRole] = useState<"host" | "staff" | null>(null);
+type Role = "host" | "staff" | "guest" | null;
+
+export default function useRole(eventId?: string) {
+  const [role, setRole] = useState<Role>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const storedRole = localStorage.getItem("role") as
-      | "host"
-      | "staff"
-      | null;
+    const fetchRole = async () => {
+      try {
+        const user = auth.currentUser;
 
-    setRole(storedRole || "staff"); // default = safest
-  }, []);
+        if (!user || !eventId) {
+          setRole("guest");
+          setLoading(false);
+          return;
+        }
 
-  return role;
+        const eventRef = doc(db, "events", eventId);
+        const snap = await getDoc(eventRef);
+
+        if (!snap.exists()) {
+          setRole("guest");
+          setLoading(false);
+          return;
+        }
+
+        const data = snap.data();
+        const roles = data.roles || {};
+
+        const userRole = roles[user.uid] || "guest";
+
+        setRole(userRole);
+      } catch (error) {
+        console.error("Failed to resolve role:", error);
+        setRole("guest");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchRole();
+  }, [eventId]);
+
+  return { role, loading };
 }

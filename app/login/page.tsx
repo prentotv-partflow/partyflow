@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { onAuthStateChanged } from "firebase/auth";
 import { auth, db } from "../firebase";
@@ -9,30 +9,41 @@ import { collection, addDoc, serverTimestamp } from "firebase/firestore";
 export default function LoginPage() {
   const router = useRouter();
 
+  // ✅ Prevent duplicate event creation in Strict Mode / re-renders
+  const hasCreatedEvent = useRef(false);
+
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      console.log("USER:", user?.uid);
-
       if (!user) {
         console.log("No user logged in");
         return;
       }
 
+      // ✅ Guard: prevent duplicate event creation
+      if (hasCreatedEvent.current) return;
+      hasCreatedEvent.current = true;
+
       try {
-        // ✅ CREATE EVENT
+        console.log("Authenticated USER:", user.uid);
+
+        // 🔥 Create event (auto-create flow / Option A)
         const eventRef = await addDoc(collection(db, "events"), {
           hostId: user.uid,
           createdAt: serverTimestamp(),
+          roles: {
+            [user.uid]: "host",
+          },
         });
 
         const eventId = eventRef.id;
 
         console.log("EVENT CREATED:", eventId);
 
-        // ✅ REDIRECT WITH EVENT ID
-        router.push(`/host?event=${eventId}`);
+        // 🚀 Route to host dashboard with event context
+        router.replace(`/host?event=${eventId}`);
       } catch (error) {
         console.error("EVENT CREATION FAILED:", error);
+        hasCreatedEvent.current = false; // allow retry if needed
       }
     });
 
@@ -45,7 +56,7 @@ export default function LoginPage() {
         <h1 className="text-lg font-semibold">Login</h1>
 
         <p className="text-sm text-gray-600">
-          Creating your event...
+          Setting up your event...
         </p>
 
         <p className="text-xs text-gray-400">

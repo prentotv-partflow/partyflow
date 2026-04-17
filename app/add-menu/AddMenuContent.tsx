@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { useSearchParams, useRouter } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { db } from "../firebase";
 import {
   collection,
@@ -12,7 +12,8 @@ import {
   doc,
   runTransaction,
 } from "firebase/firestore";
-import useRole from "../hooks/useRole"; // ✅ NEW
+import useRole from "../hooks/useRole";
+import HostNav from "../components/HostNav";
 
 type MenuItem = {
   id: string;
@@ -22,29 +23,21 @@ type MenuItem = {
 
 export default function AddMenuContent() {
   const searchParams = useSearchParams();
-  const router = useRouter();
-  const role = useRole(); // ✅ NEW
+  const role = useRole();
 
-  const eventId =
-    searchParams.get("event") || searchParams.get("eventId");
+  // ✅ SINGLE SOURCE OF TRUTH (no fallback ambiguity)
+  const eventId = searchParams.get("event");
 
   const [itemName, setItemName] = useState("");
   const [quantity, setQuantity] = useState("");
   const [menu, setMenu] = useState<MenuItem[]>([]);
   const [loading, setLoading] = useState(false);
-
   const [showSuggestions, setShowSuggestions] = useState(true);
 
   const nameInputRef = useRef<HTMLInputElement>(null);
   const qtyInputRef = useRef<HTMLInputElement>(null);
 
-  // 🔥 NAVIGATION HANDLER
-  const goTo = (path: string) => {
-    if (!eventId) return;
-    router.push(`${path}?event=${eventId}`);
-  };
-
-  // 🔥 REAL-TIME MENU
+  // 🔥 REAL-TIME MENU SYNC
   useEffect(() => {
     if (!eventId) return;
 
@@ -56,7 +49,7 @@ export default function AddMenuContent() {
         ...(doc.data() as Omit<MenuItem, "id">),
       }));
 
-      // ✅ Alphabetical sort (case-insensitive)
+      // ✅ stable alphabetical sort
       items.sort((a, b) =>
         a.name.toLowerCase().localeCompare(b.name.toLowerCase())
       );
@@ -90,18 +83,11 @@ export default function AddMenuContent() {
 
       const existing = menu.find(
         (item) =>
-          item.name.toLowerCase() ===
-          itemName.trim().toLowerCase()
+          item.name.toLowerCase() === itemName.trim().toLowerCase()
       );
 
       if (existing) {
-        const ref = doc(
-          db,
-          "events",
-          eventId,
-          "menu",
-          existing.id
-        );
+        const ref = doc(db, "events", eventId, "menu", existing.id);
 
         await runTransaction(db, async (transaction) => {
           const snap = await transaction.get(ref);
@@ -123,6 +109,7 @@ export default function AddMenuContent() {
         });
       }
 
+      // ✅ reset UX
       setItemName("");
       setQuantity("");
       setShowSuggestions(false);
@@ -161,9 +148,7 @@ export default function AddMenuContent() {
 
   // 🔍 Suggestions
   const suggestions = menu.filter((item) =>
-    item.name
-      .toLowerCase()
-      .includes(itemName.toLowerCase())
+    item.name.toLowerCase().includes(itemName.toLowerCase())
   );
 
   const exactMatch = menu.find(
@@ -171,10 +156,11 @@ export default function AddMenuContent() {
       item.name.toLowerCase() === itemName.toLowerCase()
   );
 
+  // 🚨 HARD FAIL (correct behavior)
   if (!eventId) {
     return (
-      <div className="flex items-center justify-center h-screen">
-        <p>Missing event ID</p>
+      <div className="flex items-center justify-center h-screen text-white">
+        Missing event context
       </div>
     );
   }
@@ -182,53 +168,14 @@ export default function AddMenuContent() {
   return (
     <div className="min-h-screen bg-gray-100">
 
-      {/* 🔥 ROLE-AWARE NAV BAR */}
-      <div className="sticky top-0 z-20 bg-[#0A0C12] border-b border-white/5 px-4 py-3 flex justify-between items-center text-white">
-        <h1 className="text-sm font-semibold">PartyFlow Host</h1>
+      {/* ✅ SHARED HOST NAV (no duplication anymore) */}
+      <HostNav eventId={eventId} />
 
-        <div className="flex gap-2 text-xs flex-wrap">
-          {/* ALWAYS AVAILABLE */}
-          <button
-            onClick={() => goTo("/host")}
-            className="px-3 py-1 rounded-full bg-white/10"
-          >
-            Queue
-          </button>
-
-          <button
-            onClick={() => goTo("/add-menu")}
-            className="px-3 py-1 rounded-full bg-white/10"
-          >
-            Add Menu
-          </button>
-
-          {/* HOST ONLY */}
-          {role === "host" && (
-            <>
-              <button
-                onClick={() => router.push("/my-events")}
-                className="px-3 py-1 rounded-full bg-white/10"
-              >
-                Events
-              </button>
-
-              <button
-                onClick={() => router.push("/create-event")}
-                className="px-3 py-1 rounded-full bg-white/10"
-              >
-                Create
-              </button>
-            </>
-          )}
-        </div>
-      </div>
-
-      {/* CONTENT */}
       <div className="flex items-center justify-center p-4">
         <div className="w-full max-w-sm bg-white p-5 rounded-2xl shadow-md">
 
           <h1 className="text-xl font-bold mb-4 text-center">
-            Add Menu Items 🍹🔥🔥🔥
+            Add Menu Items 🍹
           </h1>
 
           {/* ITEM NAME */}
