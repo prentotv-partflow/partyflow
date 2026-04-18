@@ -214,7 +214,7 @@ export default function HostContent() {
 
       {/* Global Nav */}
       <div className={needsSetup ? "pointer-events-none opacity-50" : ""}>
-        <HostNav eventId={eventId} onNavigate={setActiveTab} />
+        <HostNav eventId={eventId} activeTab={activeTab} onNavigate={setActiveTab} />
 
         {/* Tabs */}
         <div className="mt-4 flex justify-center gap-2 px-4">
