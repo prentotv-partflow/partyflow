@@ -1,172 +1,118 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { db } from "@/app/firebase";
-import {
-  collection,
-  onSnapshot,
-  query,
-  orderBy,
-  doc,
-  updateDoc,
-} from "firebase/firestore";
+import { Request } from "@/app/types/queue";
 
-type Status = "pending" | "preparing" | "ready";
-
-type Request = {
-  id: string;
-  guestName: string;
-  itemName: string;
-  status: Status;
-  createdAt?: any;
+type Props = {
+  pending: Request[];
+  preparing: Request[];
+  ready: Request[];
+  onStartPreparing: (id: string) => void;
+  onMarkReady: (id: string) => void;
+  updatingIds?: string[];
 };
 
-export default function QueueView({ eventId }: { eventId: string }) {
-  const [requests, setRequests] = useState<Request[]>([]);
+type ColumnType = "pending" | "preparing" | "ready";
 
-  useEffect(() => {
-    const q = query(
-      collection(db, "events", eventId, "requests"),
-      orderBy("createdAt", "asc")
+const colorMap: Record<ColumnType, string> = {
+  pending: "text-yellow-400",
+  preparing: "text-blue-400",
+  ready: "text-green-400",
+};
+
+const borderMap: Record<ColumnType, string> = {
+  pending: "border-yellow-400",
+  preparing: "border-blue-400",
+  ready: "border-green-400",
+};
+
+export default function QueueView({
+  pending,
+  preparing,
+  ready,
+  onStartPreparing,
+  onMarkReady,
+  updatingIds = [],
+}: Props) {
+  const renderColumn = (
+    title: string,
+    items: Request[],
+    type: ColumnType
+  ) => {
+    return (
+      <div className="flex max-h-[70vh] flex-col rounded-3xl border border-white/5 bg-[#191C24] p-3">
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="text-sm font-semibold text-white/80">{title}</h2>
+          <span className={`text-xs ${colorMap[type]}`}>{items.length}</span>
+        </div>
+
+        <div className="flex flex-col gap-2 overflow-y-auto pr-1">
+          {items.length === 0 ? (
+            <p className="py-6 text-center text-xs text-white/40">No orders</p>
+          ) : (
+            items.map((req) => {
+              const isUpdating = updatingIds.includes(req.id);
+
+              return (
+                <div
+                  key={req.id}
+                  className={`rounded-2xl border-l-4 bg-[#0A0C12] p-3 transition-all duration-300 hover:scale-[1.01] ${borderMap[type]}`}
+                >
+                  <p className="font-medium text-white">
+                    {req.itemName}
+                    {req.quantity ? ` x${req.quantity}` : ""}
+                  </p>
+
+                  <p className="mt-1 text-sm text-white/60">{req.guestName}</p>
+
+                  {type !== "ready" && (
+                    <button
+                      onClick={() =>
+                        type === "pending"
+                          ? onStartPreparing(req.id)
+                          : onMarkReady(req.id)
+                      }
+                      disabled={isUpdating}
+                      className={`mt-3 w-full rounded-full py-2 text-sm text-white transition active:scale-95 disabled:cursor-not-allowed disabled:opacity-60 ${
+                        type === "pending"
+                          ? "bg-[#FF3D9A]"
+                          : "bg-[#7A3FFF]"
+                      }`}
+                    >
+                      {isUpdating
+                        ? "Updating..."
+                        : type === "pending"
+                        ? "Start Preparing"
+                        : "Mark Ready"}
+                    </button>
+                  )}
+                </div>
+              );
+            })
+          )}
+        </div>
+      </div>
     );
-
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const data: Request[] = snapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...(doc.data() as Omit<Request, "id">),
-      }));
-
-      setRequests(data);
-    });
-
-    return () => unsubscribe();
-  }, [eventId]);
-
-  // 🧠 GROUP BY ITEM
-  const grouped = requests.reduce<Record<string, Request[]>>(
-    (acc, req) => {
-      if (!acc[req.itemName]) acc[req.itemName] = [];
-      acc[req.itemName].push(req);
-      return acc;
-    },
-    {}
-  );
-
-  // 🔄 CONTROLLED TRANSITIONS
-  const advanceStatus = async (req: Request) => {
-    const ref = doc(db, "events", eventId, "requests", req.id);
-
-    let next: Status = req.status;
-
-    if (req.status === "pending") next = "preparing";
-    else if (req.status === "preparing") next = "ready";
-
-    // ❌ ready cannot advance
-    if (req.status === "ready") return;
-
-    await updateDoc(ref, { status: next });
   };
 
-  const resetStatus = async (req: Request) => {
-    const ref = doc(db, "events", eventId, "requests", req.id);
-    await updateDoc(ref, { status: "pending" });
-  };
+  const isEmpty =
+    pending.length === 0 &&
+    preparing.length === 0 &&
+    ready.length === 0;
 
-  if (requests.length === 0) {
-    return <div className="text-sm text-gray-500">No orders yet.</div>;
+  if (isEmpty) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20 text-white/40">
+        <p>No orders yet</p>
+        <p className="mt-1 text-xs">Waiting for guests...</p>
+      </div>
+    );
   }
 
   return (
-    <div className="space-y-4">
-
-      {Object.entries(grouped).map(([itemName, group]) => {
-
-        const pending = group.filter(g => g.status === "pending").length;
-        const preparing = group.filter(g => g.status === "preparing").length;
-        const ready = group.filter(g => g.status === "ready").length;
-
-        return (
-          <div
-            key={itemName}
-            className="bg-white p-4 rounded-xl shadow"
-          >
-            {/* HEADER */}
-            <div className="flex justify-between items-center mb-2">
-              <h2 className="font-semibold">{itemName}</h2>
-              <span className="text-sm text-gray-500">
-                {group.length} orders
-              </span>
-            </div>
-
-            {/* STATUS SUMMARY */}
-            <div className="text-xs mb-3 space-x-2">
-              <span className="text-yellow-600">Pending: {pending}</span>
-              <span className="text-blue-600">Preparing: {preparing}</span>
-              <span className="text-green-600">Ready: {ready}</span>
-            </div>
-
-            {/* REQUESTS */}
-            <div className="space-y-2">
-              {group.map((req) => {
-
-                const isPending = req.status === "pending";
-                const isPreparing = req.status === "preparing";
-                const isReady = req.status === "ready";
-
-                return (
-                  <div
-                    key={req.id}
-                    className={`flex justify-between items-center p-2 rounded-lg ${
-                      isPending
-                        ? "bg-yellow-50"
-                        : isPreparing
-                        ? "bg-blue-50"
-                        : "bg-green-50"
-                    }`}
-                  >
-                    <span className="text-sm">
-                      {req.guestName}
-                    </span>
-
-                    <div className="flex gap-2">
-
-                      {/* PRIMARY ACTION */}
-                      <button
-                        onClick={() => advanceStatus(req)}
-                        disabled={isReady}
-                        className={`text-xs px-3 py-1 rounded ${
-                          isPending
-                            ? "bg-blue-500 text-white"
-                            : isPreparing
-                            ? "bg-green-500 text-white"
-                            : "bg-gray-300 text-gray-500 cursor-not-allowed"
-                        }`}
-                      >
-                        {isPending
-                          ? "Prepare"
-                          : isPreparing
-                          ? "Ready"
-                          : "Done"}
-                      </button>
-
-                      {/* RESET */}
-                      <button
-                        onClick={() => resetStatus(req)}
-                        className="text-xs px-2 py-1 bg-gray-200 rounded"
-                      >
-                        Reset
-                      </button>
-
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-
-          </div>
-        );
-      })}
-
+    <div className="grid grid-cols-1 gap-4 px-4 pb-6 md:grid-cols-3">
+      {renderColumn("Pending", pending, "pending")}
+      {renderColumn("Preparing", preparing, "preparing")}
+      {renderColumn("Ready", ready, "ready")}
     </div>
   );
 }
