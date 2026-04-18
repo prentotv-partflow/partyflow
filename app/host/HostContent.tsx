@@ -6,6 +6,7 @@ import { doc, onSnapshot, updateDoc } from "firebase/firestore";
 import { db } from "@/app/firebase";
 import HostNav from "@/app/components/HostNav";
 import QueueTab from "@/app/host/QueueTab";
+import QRCode from "react-qr-code";
 
 type Tab = "menu" | "queue";
 
@@ -29,6 +30,10 @@ export default function HostContent() {
   const [eventNameInput, setEventNameInput] = useState("");
   const [hostNameInput, setHostNameInput] = useState("");
   const [savingMeta, setSavingMeta] = useState(false);
+
+  const [guestUrl, setGuestUrl] = useState("");
+  const [copiedGuestLink, setCopiedGuestLink] = useState(false);
+  const [showGuestQR, setShowGuestQR] = useState(false);
 
   useEffect(() => {
     if (!eventId) {
@@ -63,6 +68,12 @@ export default function HostContent() {
     return () => unsubscribe();
   }, [eventId, router]);
 
+  useEffect(() => {
+    if (typeof window !== "undefined" && eventId) {
+      setGuestUrl(`${window.location.origin}/menu?event=${eventId}`);
+    }
+  }, [eventId]);
+
   const needsSetup = useMemo(() => {
     if (!eventData) return false;
 
@@ -93,6 +104,21 @@ export default function HostContent() {
       console.error("Failed to save event metadata:", error);
     } finally {
       setSavingMeta(false);
+    }
+  };
+
+  const handleCopyGuestLink = async () => {
+    if (!guestUrl) return;
+
+    try {
+      await navigator.clipboard.writeText(guestUrl);
+      setCopiedGuestLink(true);
+
+      setTimeout(() => {
+        setCopiedGuestLink(false);
+      }, 2000);
+    } catch (error) {
+      console.error("Failed to copy guest link:", error);
     }
   };
 
@@ -156,6 +182,70 @@ export default function HostContent() {
         </div>
       </div>
 
+      {/* Guest Access Card */}
+      <div className="px-4 pt-4">
+        <div className="rounded-2xl border border-[#508CFF]/20 bg-[#191C24] p-4">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className="text-xs uppercase tracking-wide text-[#8FB3FF]">
+                Guest Access
+              </p>
+              <h2 className="mt-1 text-lg font-semibold text-white">
+                Invite guests into this event
+              </h2>
+              <p className="mt-1 text-sm text-gray-400">
+                Share the direct menu link or show the QR code for quick entry.
+              </p>
+            </div>
+
+            <span className="rounded-full bg-[#508CFF]/15 px-3 py-1 text-xs text-[#8FB3FF]">
+              Share
+            </span>
+          </div>
+
+          <div className="mt-4 rounded-xl border border-white/10 bg-[#0A0C12] p-3">
+            <p className="mb-2 text-xs text-white/50">Guest Link</p>
+            <p className="break-all text-xs text-gray-300">
+              {guestUrl || "Generating link..."}
+            </p>
+          </div>
+
+          <div className="mt-4 flex flex-wrap gap-2">
+            <button
+              onClick={handleCopyGuestLink}
+              disabled={!guestUrl}
+              className="rounded-full bg-[#508CFF] px-4 py-2 text-sm font-medium text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {copiedGuestLink ? "Copied" : "Copy Link"}
+            </button>
+
+            <button
+              onClick={() => setShowGuestQR((prev) => !prev)}
+              className="rounded-full bg-white/10 px-4 py-2 text-sm font-medium text-white transition hover:bg-white/20"
+            >
+              {showGuestQR ? "Hide QR" : "Show QR"}
+            </button>
+          </div>
+
+          {showGuestQR && (
+            <div className="mt-4 rounded-2xl bg-white p-4 text-center">
+              <p className="text-sm font-semibold text-black">Guest Entry QR</p>
+              <p className="mt-1 text-xs text-gray-500">
+                Guests can scan this code to open the event menu.
+              </p>
+
+              <div className="my-4 flex justify-center">
+                <QRCode value={guestUrl || " "} size={160} />
+              </div>
+
+              <p className="break-all text-[10px] text-gray-500">
+                {guestUrl}
+              </p>
+            </div>
+          )}
+        </div>
+      </div>
+
       {/* Metadata Setup Prompt */}
       {needsSetup && (
         <div className="px-4 pt-4">
@@ -212,9 +302,13 @@ export default function HostContent() {
         </div>
       )}
 
-      {/* Global Nav */}
+      {/* Global Nav + Main Dashboard */}
       <div className={needsSetup ? "pointer-events-none opacity-50" : ""}>
-        <HostNav eventId={eventId} activeTab={activeTab} onNavigate={setActiveTab} />
+        <HostNav
+          eventId={eventId}
+          activeTab={activeTab}
+          onNavigate={setActiveTab}
+        />
 
         {/* Tabs */}
         <div className="mt-4 flex justify-center gap-2 px-4">
