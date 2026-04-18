@@ -191,7 +191,7 @@ export default function HostContent() {
                   type="text"
                   value={hostNameInput}
                   onChange={(e) => setHostNameInput(e.target.value)}
-                  placeholder="Jamoy"
+                  placeholder="Your Name Goes Here"
                   className="w-full rounded-xl border border-white/10 bg-[#0A0C12] px-4 py-3 text-sm text-white outline-none transition placeholder:text-white/30 focus:border-[#7A3FFF]"
                 />
               </div>
