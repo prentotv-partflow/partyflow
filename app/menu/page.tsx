@@ -11,7 +11,6 @@ import {
   runTransaction,
 } from "firebase/firestore";
 
-// TYPES
 type MenuItem = {
   id: string;
   name: string;
@@ -27,58 +26,61 @@ type RequestItem = {
   createdAt?: any;
 };
 
+type GuestSession = {
+  eventId: string;
+  guestId: string;
+  guestName: string;
+};
+
+const SESSION_KEY = "partyflow_guest_session";
+
+function getSession(): GuestSession | null {
+  if (typeof window === "undefined") return null;
+  const raw = localStorage.getItem(SESSION_KEY);
+  return raw ? JSON.parse(raw) : null;
+}
+
+function setSession(session: GuestSession) {
+  localStorage.setItem(SESSION_KEY, JSON.stringify(session));
+}
+
 function MenuContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
 
   const eventId = searchParams.get("event");
-  const nameFromUrl = searchParams.get("name");
 
-  const [guestName, setGuestName] = useState("");
-  const [guestId, setGuestId] = useState("");
+  const [session, setSessionState] = useState<GuestSession | null>(null);
 
   const [menu, setMenu] = useState<MenuItem[]>([]);
   const [requests, setRequests] = useState<RequestItem[]>([]);
   const [loadingItem, setLoadingItem] = useState<string | null>(null);
-
   const [toast, setToast] = useState<string | null>(null);
-  const [checkingAuth, setCheckingAuth] = useState(true);
+  const [checking, setChecking] = useState(true);
 
-  // 🚨 HARD FAIL
-  if (!eventId) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-[#0A0C12] text-white">
-        Invalid event link
-      </div>
-    );
-  }
-
-  // 🔐 AUTH GATE
+  // 🔐 SESSION INITIALIZATION (SINGLE SOURCE OF TRUTH)
   useEffect(() => {
-    const storedName = localStorage.getItem("guestName");
+    if (!eventId) return;
 
-    if (nameFromUrl) {
-      localStorage.setItem("guestName", nameFromUrl);
-      setGuestName(nameFromUrl);
-      setCheckingAuth(false);
+    const existing = getSession();
+
+    // valid session
+    if (existing && existing.eventId === eventId) {
+      setSessionState(existing);
+      setChecking(false);
       return;
     }
 
-    if (storedName) {
-      setGuestName(storedName);
-      setCheckingAuth(false);
-      return;
-    }
+    // missing session → redirect to onboarding
+    router.replace(`/event?event=${eventId}`);
+  }, [eventId, router]);
 
-    router.push(`/event?event=${eventId}`);
-  }, [eventId, nameFromUrl, router]);
-
-  // 🔥 MENU LISTENER + GUEST ID
+  // 🔥 MENU LISTENER
   useEffect(() => {
-    if (checkingAuth) return;
+    if (!session) return;
 
     const unsubscribe = onSnapshot(
-      collection(db, "events", eventId, "menu"),
+      collection(db, "events", session.eventId, "menu"),
       (snapshot) => {
         const items: MenuItem[] = snapshot.docs.map((doc) => ({
           id: doc.id,
@@ -93,46 +95,24 @@ function MenuContent() {
       }
     );
 
-    const storedId = localStorage.getItem("guestId");
-    if (storedId) {
-      setGuestId(storedId);
-    } else {
-      const newId = Math.floor(1000 + Math.random() * 9000).toString();
-      localStorage.setItem("guestId", newId);
-      setGuestId(newId);
-    }
-
     return () => unsubscribe();
-  }, [eventId, checkingAuth]);
+  }, [session]);
 
-  // 🔥 REQUEST LISTENER (THIS USER ONLY)
+  // 🔥 REQUEST LISTENER (ONLY THIS GUEST)
   useEffect(() => {
-    if (!guestId || checkingAuth) return;
+    if (!session) return;
 
     const unsubscribe = onSnapshot(
-      collection(db, "events", eventId, "requests"),
+      collection(db, "events", session.eventId, "requests"),
       (snapshot) => {
         const list: RequestItem[] = [];
 
         snapshot.forEach((docSnap) => {
           const data = docSnap.data() as Omit<RequestItem, "id">;
 
-          if (data.guestId === guestId) {
+          if (data.guestId === session.guestId) {
             list.push({ ...data, id: docSnap.id });
           }
-        });
-
-        list.sort((a, b) => {
-          const nameCompare = a.itemName
-            .toLowerCase()
-            .localeCompare(b.itemName.toLowerCase());
-
-          if (nameCompare !== 0) return nameCompare;
-
-          return (
-            (a.createdAt?.seconds || 0) -
-            (b.createdAt?.seconds || 0)
-          );
         });
 
         setRequests(list);
@@ -140,18 +120,18 @@ function MenuContent() {
     );
 
     return () => unsubscribe();
-  }, [eventId, guestId, checkingAuth]);
+  }, [session]);
 
-  // 🔥 REQUEST ACTION
+  // 🔥 REQUEST ITEM
   const handleRequest = async (item: MenuItem) => {
-    if (!guestName.trim()) return showToast("❌ Missing name");
+    if (!session) return;
     if (loadingItem) return;
 
     setLoadingItem(item.id);
 
     try {
-      const itemRef = doc(db, "events", eventId, "menu", item.id);
-      const requestsRef = collection(db, "events", eventId, "requests");
+      const itemRef = doc(db, "events", session.eventId, "menu", item.id);
+      const requestRef = doc(collection(db, "events", session.eventId, "requests"));
 
       await runTransaction(db, async (tx) => {
         const snap = await tx.get(itemRef);
@@ -160,12 +140,10 @@ function MenuContent() {
         const currentQty = snap.data().qty;
         if (currentQty <= 0) throw new Error("Out of stock");
 
-        const requestRef = doc(requestsRef);
-
         tx.set(requestRef, {
-          eventId,
-          guestId,
-          guestName,
+          eventId: session.eventId,
+          guestId: session.guestId,
+          guestName: session.guestName,
           itemName: item.name,
           quantity: 1,
           status: "pending",
@@ -175,23 +153,17 @@ function MenuContent() {
         tx.update(itemRef, { qty: currentQty - 1 });
       });
 
-      showToast(`✅ ${item.name} added`);
+      setToast(`✅ ${item.name} requested`);
+      setTimeout(() => setToast(null), 2000);
 
     } catch (err: any) {
-      console.error(err);
-      showToast(`❌ ${err.message || "Failed"}`);
+      setToast(`❌ ${err.message}`);
     } finally {
       setLoadingItem(null);
     }
   };
 
-  const showToast = (msg: string) => {
-    setToast(msg);
-    setTimeout(() => setToast(null), 2000);
-  };
-
-  // ⛔ WAIT FOR AUTH
-  if (checkingAuth) {
+  if (checking || !session) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#0A0C12] text-white">
         Entering event...
@@ -202,15 +174,20 @@ function MenuContent() {
   return (
     <div className="min-h-screen bg-gray-100 flex flex-col">
 
+      {/* HEADER */}
       <div className="bg-white p-4 shadow-sm sticky top-0 z-10">
         <h1 className="text-lg font-semibold text-center">
           Party Menu 🍽️
         </h1>
+
+        <p className="text-xs text-gray-500 text-center">
+          {session.guestName}
+        </p>
       </div>
 
+      {/* MENU */}
       <div className="flex-1 p-4 space-y-4 max-w-md w-full mx-auto">
 
-        {/* MENU */}
         {menu.length === 0 ? (
           <p className="text-center text-gray-400 text-sm">
             No items available
@@ -273,7 +250,7 @@ function MenuContent() {
 
       {/* TOAST */}
       {toast && (
-        <div className="fixed bottom-5 left-1/2 -translate-x-1/2 bg-black text-white px-4 py-2 rounded-lg shadow-lg text-sm">
+        <div className="fixed bottom-5 left-1/2 -translate-x-1/2 bg-black text-white px-4 py-2 rounded-lg text-sm">
           {toast}
         </div>
       )}
