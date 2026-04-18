@@ -33,6 +33,7 @@ export default function HostContent() {
 
   const [guestUrl, setGuestUrl] = useState("");
   const [copiedGuestLink, setCopiedGuestLink] = useState(false);
+  const [showGuestAccess, setShowGuestAccess] = useState(false);
   const [showGuestQR, setShowGuestQR] = useState(false);
 
   useEffect(() => {
@@ -122,6 +123,18 @@ export default function HostContent() {
     }
   };
 
+  const handleToggleGuestAccess = () => {
+    setShowGuestAccess((prev) => {
+      const next = !prev;
+
+      if (!next) {
+        setShowGuestQR(false);
+      }
+
+      return next;
+    });
+  };
+
   if (!eventId || loadingEvent) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#0A0C12] text-gray-400">
@@ -182,65 +195,71 @@ export default function HostContent() {
         </div>
       </div>
 
-      {/* Guest Access Card */}
+      {/* Guest Access Toggle Card */}
       <div className="px-4 pt-4">
         <div className="rounded-2xl border border-[#508CFF]/20 bg-[#191C24] p-4">
-          <div className="flex items-start justify-between gap-4">
+          <div className="flex items-center justify-between gap-4">
             <div>
               <p className="text-xs uppercase tracking-wide text-[#8FB3FF]">
                 Guest Access
               </p>
-              <h2 className="mt-1 text-lg font-semibold text-white">
-                Invite guests into this event
-              </h2>
               <p className="mt-1 text-sm text-gray-400">
-                Share the direct menu link or show the QR code for quick entry.
+                Share the guest menu link or QR only when needed.
               </p>
             </div>
 
-            <span className="rounded-full bg-[#508CFF]/15 px-3 py-1 text-xs text-[#8FB3FF]">
-              Share
-            </span>
-          </div>
-
-          <div className="mt-4 rounded-xl border border-white/10 bg-[#0A0C12] p-3">
-            <p className="mb-2 text-xs text-white/50">Guest Link</p>
-            <p className="break-all text-xs text-gray-300">
-              {guestUrl || "Generating link..."}
-            </p>
-          </div>
-
-          <div className="mt-4 flex flex-wrap gap-2">
             <button
-              onClick={handleCopyGuestLink}
-              disabled={!guestUrl}
-              className="rounded-full bg-[#508CFF] px-4 py-2 text-sm font-medium text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {copiedGuestLink ? "Copied" : "Copy Link"}
-            </button>
-
-            <button
-              onClick={() => setShowGuestQR((prev) => !prev)}
+              onClick={handleToggleGuestAccess}
               className="rounded-full bg-white/10 px-4 py-2 text-sm font-medium text-white transition hover:bg-white/20"
             >
-              {showGuestQR ? "Hide QR" : "Show QR"}
+              {showGuestAccess ? "Hide" : "Show"}
             </button>
           </div>
 
-          {showGuestQR && (
-            <div className="mt-4 rounded-2xl bg-white p-4 text-center">
-              <p className="text-sm font-semibold text-black">Guest Entry QR</p>
-              <p className="mt-1 text-xs text-gray-500">
-                Guests can scan this code to open the event menu.
-              </p>
-
-              <div className="my-4 flex justify-center">
-                <QRCode value={guestUrl || " "} size={160} />
+          {showGuestAccess && (
+            <div className="mt-4 border-t border-white/10 pt-4">
+              <div className="rounded-xl border border-white/10 bg-[#0A0C12] p-3">
+                <p className="mb-2 text-xs text-white/50">Guest Link</p>
+                <p className="break-all text-xs text-gray-300">
+                  {guestUrl || "Generating link..."}
+                </p>
               </div>
 
-              <p className="break-all text-[10px] text-gray-500">
-                {guestUrl}
-              </p>
+              <div className="mt-4 flex flex-wrap gap-2">
+                <button
+                  onClick={handleCopyGuestLink}
+                  disabled={!guestUrl}
+                  className="rounded-full bg-[#508CFF] px-4 py-2 text-sm font-medium text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {copiedGuestLink ? "Copied" : "Copy Link"}
+                </button>
+
+                <button
+                  onClick={() => setShowGuestQR((prev) => !prev)}
+                  className="rounded-full bg-white/10 px-4 py-2 text-sm font-medium text-white transition hover:bg-white/20"
+                >
+                  {showGuestQR ? "Hide QR" : "Show QR"}
+                </button>
+              </div>
+
+              {showGuestQR && (
+                <div className="mt-4 rounded-2xl bg-white p-4 text-center">
+                  <p className="text-sm font-semibold text-black">
+                    Guest Entry QR
+                  </p>
+                  <p className="mt-1 text-xs text-gray-500">
+                    Guests can scan this code to open the event menu.
+                  </p>
+
+                  <div className="my-4 flex justify-center">
+                    <QRCode value={guestUrl || " "} size={160} />
+                  </div>
+
+                  <p className="break-all text-[10px] text-gray-500">
+                    {guestUrl}
+                  </p>
+                </div>
+              )}
             </div>
           )}
         </div>
