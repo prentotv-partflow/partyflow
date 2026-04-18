@@ -12,7 +12,7 @@ import {
   updateDoc,
 } from "firebase/firestore";
 import QueueView from "@/app/components/QueueView";
-import { Request } from "@/types/queue";
+import { Request } from "@/app/types/queue";
 
 export default function QueueTab() {
   const searchParams = useSearchParams();
