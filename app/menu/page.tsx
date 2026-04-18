@@ -8,7 +8,7 @@ import {
   serverTimestamp,
   onSnapshot,
   doc,
-  runTransaction,
+  setDoc,
 } from "firebase/firestore";
 
 type MenuItem = {
@@ -36,12 +36,9 @@ const SESSION_KEY = "partyflow_guest_session";
 
 function getSession(): GuestSession | null {
   if (typeof window === "undefined") return null;
+
   const raw = localStorage.getItem(SESSION_KEY);
   return raw ? JSON.parse(raw) : null;
-}
-
-function setSession(session: GuestSession) {
-  localStorage.setItem(SESSION_KEY, JSON.stringify(session));
 }
 
 function MenuContent() {
@@ -51,40 +48,37 @@ function MenuContent() {
   const eventId = searchParams.get("event");
 
   const [session, setSessionState] = useState<GuestSession | null>(null);
-
   const [menu, setMenu] = useState<MenuItem[]>([]);
   const [requests, setRequests] = useState<RequestItem[]>([]);
   const [loadingItem, setLoadingItem] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [checking, setChecking] = useState(true);
 
-  // 🔐 SESSION INITIALIZATION (SINGLE SOURCE OF TRUTH)
+  // 🔐 SESSION CHECK
   useEffect(() => {
     if (!eventId) return;
 
     const existing = getSession();
 
-    // valid session
     if (existing && existing.eventId === eventId) {
       setSessionState(existing);
       setChecking(false);
       return;
     }
 
-    // missing session → redirect to onboarding
     router.replace(`/event?event=${eventId}`);
   }, [eventId, router]);
 
-  // 🔥 MENU LISTENER
+  // 🍽️ MENU LISTENER
   useEffect(() => {
     if (!session) return;
 
     const unsubscribe = onSnapshot(
       collection(db, "events", session.eventId, "menu"),
       (snapshot) => {
-        const items: MenuItem[] = snapshot.docs.map((doc) => ({
-          id: doc.id,
-          ...(doc.data() as Omit<MenuItem, "id">),
+        const items: MenuItem[] = snapshot.docs.map((docSnap) => ({
+          id: docSnap.id,
+          ...(docSnap.data() as Omit<MenuItem, "id">),
         }));
 
         items.sort((a, b) =>
@@ -98,7 +92,7 @@ function MenuContent() {
     return () => unsubscribe();
   }, [session]);
 
-  // 🔥 REQUEST LISTENER (ONLY THIS GUEST)
+  // 🧾 MY REQUESTS LISTENER
   useEffect(() => {
     if (!session) return;
 
@@ -111,7 +105,10 @@ function MenuContent() {
           const data = docSnap.data() as Omit<RequestItem, "id">;
 
           if (data.guestId === session.guestId) {
-            list.push({ ...data, id: docSnap.id });
+            list.push({
+              id: docSnap.id,
+              ...data,
+            });
           }
         });
 
@@ -122,42 +119,39 @@ function MenuContent() {
     return () => unsubscribe();
   }, [session]);
 
-  // 🔥 REQUEST ITEM
+  // 🔥 REQUEST ITEM (guest only creates request)
   const handleRequest = async (item: MenuItem) => {
     if (!session) return;
     if (loadingItem) return;
 
+    if (item.qty <= 0) {
+      setToast("❌ Out of stock");
+      setTimeout(() => setToast(null), 2000);
+      return;
+    }
+
     setLoadingItem(item.id);
 
     try {
-      const itemRef = doc(db, "events", session.eventId, "menu", item.id);
-      const requestRef = doc(collection(db, "events", session.eventId, "requests"));
+      const requestRef = doc(
+        collection(db, "events", session.eventId, "requests")
+      );
 
-      await runTransaction(db, async (tx) => {
-        const snap = await tx.get(itemRef);
-        if (!snap.exists()) throw new Error("Item missing");
-
-        const currentQty = snap.data().qty;
-        if (currentQty <= 0) throw new Error("Out of stock");
-
-        tx.set(requestRef, {
-          eventId: session.eventId,
-          guestId: session.guestId,
-          guestName: session.guestName,
-          itemName: item.name,
-          quantity: 1,
-          status: "pending",
-          createdAt: serverTimestamp(),
-        });
-
-        tx.update(itemRef, { qty: currentQty - 1 });
+      await setDoc(requestRef, {
+        eventId: session.eventId,
+        guestId: session.guestId,
+        guestName: session.guestName,
+        itemName: item.name,
+        quantity: 1,
+        status: "pending",
+        createdAt: serverTimestamp(),
       });
 
       setToast(`✅ ${item.name} requested`);
       setTimeout(() => setToast(null), 2000);
-
     } catch (err: any) {
       setToast(`❌ ${err.message}`);
+      setTimeout(() => setToast(null), 2500);
     } finally {
       setLoadingItem(null);
     }
@@ -173,23 +167,21 @@ function MenuContent() {
 
   return (
     <div className="min-h-screen bg-gray-100 flex flex-col">
-
       {/* HEADER */}
-      <div className="bg-white p-4 shadow-sm sticky top-0 z-10">
-        <h1 className="text-lg font-semibold text-center">
+      <div className="sticky top-0 z-10 bg-white p-4 shadow-sm">
+        <h1 className="text-center text-lg font-semibold">
           Party Menu 🍽️
         </h1>
 
-        <p className="text-xs text-gray-500 text-center">
+        <p className="text-center text-xs text-gray-500">
           {session.guestName}
         </p>
       </div>
 
       {/* MENU */}
-      <div className="flex-1 p-4 space-y-4 max-w-md w-full mx-auto">
-
+      <div className="mx-auto flex-1 w-full max-w-md space-y-4 p-4">
         {menu.length === 0 ? (
-          <p className="text-center text-gray-400 text-sm">
+          <p className="text-center text-sm text-gray-400">
             No items available
           </p>
         ) : (
@@ -197,10 +189,11 @@ function MenuContent() {
             {menu.map((item) => (
               <div
                 key={item.id}
-                className="bg-white p-4 rounded-xl shadow-sm flex justify-between"
+                className="flex justify-between rounded-xl bg-white p-4 shadow-sm"
               >
                 <div>
                   <p className="font-semibold">{item.name}</p>
+
                   <p className="text-xs text-gray-500">
                     {item.qty} available
                   </p>
@@ -208,8 +201,10 @@ function MenuContent() {
 
                 <button
                   onClick={() => handleRequest(item)}
-                  disabled={loadingItem === item.id || item.qty === 0}
-                  className={`px-4 py-2 rounded-lg text-sm ${
+                  disabled={
+                    loadingItem === item.id || item.qty === 0
+                  }
+                  className={`rounded-lg px-4 py-2 text-sm ${
                     item.qty === 0
                       ? "bg-gray-300 text-gray-500"
                       : "bg-black text-white"
@@ -227,8 +222,8 @@ function MenuContent() {
         )}
 
         {/* REQUESTS */}
-        <div className="bg-white p-4 rounded-xl shadow-sm">
-          <h2 className="font-semibold mb-2 text-sm">
+        <div className="rounded-xl bg-white p-4 shadow-sm">
+          <h2 className="mb-2 text-sm font-semibold">
             Your Requests
           </h2>
 
@@ -240,7 +235,8 @@ function MenuContent() {
             <ul className="space-y-1 text-sm">
               {requests.map((req) => (
                 <li key={req.id}>
-                  • {req.itemName} x{req.quantity} ({req.status})
+                  • {req.itemName} x{req.quantity} (
+                  {req.status})
                 </li>
               ))}
             </ul>
@@ -250,7 +246,7 @@ function MenuContent() {
 
       {/* TOAST */}
       {toast && (
-        <div className="fixed bottom-5 left-1/2 -translate-x-1/2 bg-black text-white px-4 py-2 rounded-lg text-sm">
+        <div className="fixed bottom-5 left-1/2 -translate-x-1/2 rounded-lg bg-black px-4 py-2 text-sm text-white">
           {toast}
         </div>
       )}
