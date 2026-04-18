@@ -1,32 +1,30 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { onAuthStateChanged } from "firebase/auth";
+import {
+  onAuthStateChanged,
+  GoogleAuthProvider,
+  signInWithPopup,
+} from "firebase/auth";
 import { auth, db } from "../firebase";
 import { collection, addDoc, serverTimestamp } from "firebase/firestore";
 
 export default function LoginPage() {
   const router = useRouter();
-
-  // ✅ Prevent duplicate event creation in Strict Mode / re-renders
   const hasCreatedEvent = useRef(false);
 
+  const [loading, setLoading] = useState(false);
+
+  // 🔐 AUTH LISTENER
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      if (!user) {
-        console.log("No user logged in");
-        return;
-      }
+      if (!user) return;
 
-      // ✅ Guard: prevent duplicate event creation
       if (hasCreatedEvent.current) return;
       hasCreatedEvent.current = true;
 
       try {
-        console.log("Authenticated USER:", user.uid);
-
-        // 🔥 Create event (auto-create flow / Option A)
         const eventRef = await addDoc(collection(db, "events"), {
           hostId: user.uid,
           createdAt: serverTimestamp(),
@@ -35,32 +33,47 @@ export default function LoginPage() {
           },
         });
 
-        const eventId = eventRef.id;
-
-        console.log("EVENT CREATED:", eventId);
-
-        // 🚀 Route to host dashboard with event context
-        router.replace(`/host?event=${eventId}`);
+        router.replace(`/host?event=${eventRef.id}`);
       } catch (error) {
         console.error("EVENT CREATION FAILED:", error);
-        hasCreatedEvent.current = false; // allow retry if needed
+        hasCreatedEvent.current = false;
       }
     });
 
     return () => unsubscribe();
   }, [router]);
 
+  // 🔑 GOOGLE LOGIN TRIGGER
+  const handleLogin = async () => {
+    try {
+      setLoading(true);
+
+      const provider = new GoogleAuthProvider();
+      await signInWithPopup(auth, provider);
+    } catch (error) {
+      console.error("LOGIN FAILED:", error);
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-100 px-4">
-      <div className="bg-white p-6 rounded-2xl shadow-md w-full max-w-sm text-center space-y-2">
+      <div className="bg-white p-6 rounded-2xl shadow-md w-full max-w-sm text-center space-y-4">
         <h1 className="text-lg font-semibold">Login</h1>
 
         <p className="text-sm text-gray-600">
-          Setting up your event...
+          {loading ? "Signing you in..." : "Continue with Google to start your event"}
         </p>
 
+        <button
+          onClick={handleLogin}
+          className="bg-black text-white px-4 py-2 rounded-lg w-full"
+        >
+          Continue with Google
+        </button>
+
         <p className="text-xs text-gray-400">
-          Redirecting to host dashboard...
+          You will be redirected to your host dashboard after login
         </p>
       </div>
     </div>
