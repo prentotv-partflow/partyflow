@@ -75,8 +75,8 @@ export default function MyEvents() {
 
       const eventRef = await addDoc(collection(db, "events"), {
         hostId: user.uid,
-        hostName: user.displayName || "Host",
-        eventName: "Untitled Event",
+        hostName:  "",
+        eventName: "",
         createdAt: serverTimestamp(),
       });
 
