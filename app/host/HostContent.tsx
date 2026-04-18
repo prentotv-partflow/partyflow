@@ -310,31 +310,6 @@ export default function HostContent() {
           onNavigate={setActiveTab}
         />
 
-        {/* Tabs */}
-        <div className="mt-4 flex justify-center gap-2 px-4">
-          <button
-            onClick={() => setActiveTab("menu")}
-            className={`rounded-full px-4 py-2 text-sm transition ${
-              activeTab === "menu"
-                ? "bg-white text-black"
-                : "bg-white/10 text-white hover:bg-white/20"
-            }`}
-          >
-            Menu
-          </button>
-
-          <button
-            onClick={() => setActiveTab("queue")}
-            className={`rounded-full px-4 py-2 text-sm transition ${
-              activeTab === "queue"
-                ? "bg-white text-black"
-                : "bg-white/10 text-white hover:bg-white/20"
-            }`}
-          >
-            Queue
-          </button>
-        </div>
-
         {/* Content */}
         <div className="space-y-4 p-4">
           {activeTab === "menu" && (
