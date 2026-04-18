@@ -172,23 +172,23 @@ export default function HostContent() {
         </button>
       </div>
 
-      {/* Event Header */}
-      <div className="px-4 pt-4">
-        <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <p className="text-xs uppercase tracking-wide text-white/40">
+      {/* Compact Event Header */}
+      <div className="px-4 pt-3">
+        <div className="rounded-xl border border-white/10 bg-white/5 px-4 py-3">
+          <div className="flex items-center justify-between gap-4">
+            <div className="min-w-0">
+              <p className="text-[10px] uppercase tracking-[0.18em] text-white/35">
                 Event
               </p>
-              <h1 className="mt-1 text-2xl font-semibold">
+              <h1 className="mt-1 truncate text-xl font-semibold">
                 {eventData.eventName?.trim() || "Untitled Event"}
               </h1>
-              <p className="mt-2 text-sm text-gray-400">
+              <p className="mt-1 text-sm text-gray-400">
                 Host: {eventData.hostName?.trim() || "Not set"}
               </p>
             </div>
 
-            <span className="rounded-full bg-[#7A3FFF]/20 px-3 py-1 text-xs text-[#C7B3FF]">
+            <span className="shrink-0 rounded-full bg-[#7A3FFF]/20 px-3 py-1 text-xs text-[#C7B3FF]">
               Host Dashboard
             </span>
           </div>
@@ -196,11 +196,11 @@ export default function HostContent() {
       </div>
 
       {/* Guest Access Toggle Card */}
-      <div className="px-4 pt-4">
-        <div className="rounded-2xl border border-[#508CFF]/20 bg-[#191C24] p-4">
+      <div className="px-4 pt-3">
+        <div className="rounded-xl border border-[#508CFF]/20 bg-[#191C24] px-4 py-3">
           <div className="flex items-center justify-between gap-4">
-            <div>
-              <p className="text-xs uppercase tracking-wide text-[#8FB3FF]">
+            <div className="min-w-0">
+              <p className="text-[10px] uppercase tracking-[0.18em] text-[#8FB3FF]">
                 Guest Access
               </p>
               <p className="mt-1 text-sm text-gray-400">
@@ -210,7 +210,7 @@ export default function HostContent() {
 
             <button
               onClick={handleToggleGuestAccess}
-              className="rounded-full bg-white/10 px-4 py-2 text-sm font-medium text-white transition hover:bg-white/20"
+              className="shrink-0 rounded-full bg-white/10 px-4 py-2 text-sm font-medium text-white transition hover:bg-white/20"
             >
               {showGuestAccess ? "Hide" : "Show"}
             </button>
@@ -267,7 +267,7 @@ export default function HostContent() {
 
       {/* Metadata Setup Prompt */}
       {needsSetup && (
-        <div className="px-4 pt-4">
+        <div className="px-4 pt-3">
           <div className="rounded-2xl border border-[#FF3D9A]/30 bg-[#191C24] p-4 shadow-sm">
             <div className="mb-4">
               <h2 className="text-lg font-semibold text-white">
