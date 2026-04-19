@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 import { db } from "../firebase";
 import {
   collection,
@@ -22,6 +22,7 @@ type MenuItem = {
 
 export default function AddMenuContent() {
   const searchParams = useSearchParams();
+  const router = useRouter();
 
   const eventId = searchParams.get("event");
 
@@ -54,6 +55,19 @@ export default function AddMenuContent() {
 
     return () => unsubscribe();
   }, [eventId]);
+
+  const handleHostNavChange = (tab: "menu" | "queue") => {
+    if (!eventId) return;
+
+    if (tab === "queue") {
+      router.push(`/host?event=${eventId}`);
+      return;
+    }
+
+    if (tab === "menu") {
+      router.push(`/add-menu?event=${eventId}`);
+    }
+  };
 
   const addItem = async () => {
     if (!itemName.trim() || !quantity.trim()) {
@@ -162,13 +176,16 @@ export default function AddMenuContent() {
     <div className="min-h-screen bg-[#0A0C12] text-white">
       <div className="sticky top-0 z-30 border-b border-white/5 bg-[#0A0C12]/92 backdrop-blur-xl">
         <div className="mx-auto w-full max-w-6xl px-4 py-4">
-          <HostNav eventId={eventId} activeTab="menu" />
+          <HostNav
+            eventId={eventId}
+            activeTab="menu"
+            onNavigate={handleHostNavChange}
+          />
         </div>
       </div>
 
       <div className="mx-auto w-full max-w-6xl px-4 py-4">
         <div className="mx-auto w-full max-w-3xl space-y-4">
-          {/* HEADER */}
           <div className="rounded-3xl border border-white/10 bg-[#141821] px-5 py-5">
             <p className="text-[10px] uppercase tracking-[0.18em] text-[#8FB3FF]">
               Menu Management
@@ -180,7 +197,6 @@ export default function AddMenuContent() {
             </p>
           </div>
 
-          {/* ADD FORM */}
           <div className="rounded-3xl border border-white/10 bg-[#191C24] p-4 sm:p-5">
             <div className="mb-4">
               <h2 className="text-lg font-semibold">Add or Restock Items</h2>
@@ -190,7 +206,6 @@ export default function AddMenuContent() {
             </div>
 
             <div className="space-y-3">
-              {/* ITEM NAME */}
               <div>
                 <label className="mb-2 block text-sm text-white/80">
                   Item Name
@@ -214,7 +229,6 @@ export default function AddMenuContent() {
                 />
               </div>
 
-              {/* SUGGESTIONS */}
               {showSuggestions &&
                 itemName &&
                 suggestions.length > 0 &&
@@ -242,7 +256,6 @@ export default function AddMenuContent() {
                   </div>
                 )}
 
-              {/* QUANTITY */}
               <div>
                 <label className="mb-2 block text-sm text-white/80">
                   Quantity
@@ -273,7 +286,6 @@ export default function AddMenuContent() {
             </div>
           </div>
 
-          {/* MENU LIST */}
           <div className="rounded-3xl border border-white/10 bg-[#191C24] p-4 sm:p-5">
             <div className="mb-4 flex items-start justify-between gap-3">
               <div>
