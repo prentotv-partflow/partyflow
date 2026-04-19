@@ -218,17 +218,26 @@ export default function HostContent() {
         </button>
       </div>
 
+      {/* Global Nav */}
+      <div className={needsSetup ? "pointer-events-none opacity-50" : ""}>
+        <HostNav
+          eventId={eventId}
+          activeTab={activeTab}
+          onNavigate={setActiveTab}
+        />
+      </div>
+
       {/* Compact Event Header */}
-      <div className="px-4 pt-3">
+      <div className="px-4 pt-4">
         <div className="rounded-xl border border-white/10 bg-white/5 px-4 py-3">
           <div className="flex items-center justify-between gap-4">
             <div className="min-w-0">
               <p className="text-[10px] uppercase tracking-[0.18em] text-white/35">
                 Event
               </p>
-              <h1 className="mt-1 truncate text-xl font-semibold">
+              <h2 className="mt-1 truncate text-xl font-semibold">
                 {eventData.eventName?.trim() || "Untitled Event"}
-              </h1>
+              </h2>
               <p className="mt-1 text-sm text-gray-400">
                 Host: {eventData.hostName?.trim() || "Not set"}
               </p>
@@ -379,15 +388,8 @@ export default function HostContent() {
         </div>
       )}
 
-      {/* Global Nav + Main Dashboard */}
+      {/* Main Dashboard Content */}
       <div className={needsSetup ? "pointer-events-none opacity-50" : ""}>
-        <HostNav
-          eventId={eventId}
-          activeTab={activeTab}
-          onNavigate={setActiveTab}
-        />
-
-        {/* Content */}
         <div className="space-y-4 p-4">
           {activeTab === "menu" && (
             <div className="space-y-3 rounded-2xl border border-white/10 bg-white/5 p-4">
