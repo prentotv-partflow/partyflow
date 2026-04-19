@@ -25,24 +25,17 @@ export default function Home() {
               link and order without the bar line chaos.
             </p>
 
-            <div className="mt-8 flex flex-wrap gap-3">
+            <div className="mt-8">
               <Link
                 href="/login"
-                className="rounded-full bg-white px-6 py-3 text-sm font-semibold text-black transition hover:bg-gray-200"
-              >
-                Get Started
-              </Link>
-
-              <Link
-                href="/login"
-                className="rounded-full border border-white/10 bg-white/5 px-6 py-3 text-sm font-medium text-white transition hover:bg-white/10"
+                className="inline-block rounded-full bg-white px-6 py-3 text-sm font-semibold text-black transition hover:bg-gray-200"
               >
                 Host Login
               </Link>
             </div>
 
             <p className="mt-4 text-xs text-white/32">
-              Guests require no sign-in.
+              Guests join instantly by link or QR code.
             </p>
           </div>
 
