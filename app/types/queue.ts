@@ -8,3 +8,14 @@ export type Request = {
   status: Status;
   createdAt?: any;
 };
+
+export type GroupedRequestCard = {
+  groupKey: string;
+  itemName: string;
+  status: Status;
+  totalQuantity: number;
+  orderCount: number;
+  requestIds: string[];
+  requests: Request[];
+  latestCreatedAt?: any;
+};

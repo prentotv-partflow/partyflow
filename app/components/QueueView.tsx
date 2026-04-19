@@ -1,23 +1,17 @@
 "use client";
 
-import { Request } from "@/app/types/queue";
+import { GroupedRequestCard } from "@/app/types/queue";
 
 type Props = {
-  pending: Request[];
-  preparing: Request[];
-  ready: Request[];
-  onStartPreparing: (id: string) => void;
-  onMarkReady: (id: string) => void;
+  pending: GroupedRequestCard[];
+  preparing: GroupedRequestCard[];
+  ready: GroupedRequestCard[];
+  onStartPreparing: (requestIds: string[]) => void;
+  onMarkReady: (requestIds: string[]) => void;
   updatingIds?: string[];
 };
 
 type ColumnType = "pending" | "preparing" | "ready";
-
-const colorMap: Record<ColumnType, string> = {
-  pending: "text-yellow-400",
-  preparing: "text-blue-400",
-  ready: "text-green-400",
-};
 
 const badgeMap: Record<ColumnType, string> = {
   pending: "bg-yellow-500/20 text-yellow-300",
@@ -25,10 +19,10 @@ const badgeMap: Record<ColumnType, string> = {
   ready: "bg-green-500/20 text-green-300",
 };
 
-const borderMap: Record<ColumnType, string> = {
-  pending: "border-yellow-400/70",
-  preparing: "border-blue-400/70",
-  ready: "border-green-400/70",
+const accentBarMap: Record<ColumnType, string> = {
+  pending: "bg-yellow-500/70",
+  preparing: "bg-blue-500/70",
+  ready: "bg-green-500/70",
 };
 
 const glowMap: Record<ColumnType, string> = {
@@ -47,7 +41,7 @@ export default function QueueView({
 }: Props) {
   const renderColumn = (
     title: string,
-    items: Request[],
+    items: GroupedRequestCard[],
     type: ColumnType
   ) => {
     const isPendingColumn = type === "pending";
@@ -68,8 +62,8 @@ export default function QueueView({
 
             <p className="mt-1 text-xs text-white/40">
               {items.length === 0
-                ? "No active orders"
-                : `${items.length} ${items.length === 1 ? "order" : "orders"}`}
+                ? "No active groups"
+                : `${items.length} ${items.length === 1 ? "group" : "groups"}`}
             </p>
           </div>
 
@@ -89,23 +83,29 @@ export default function QueueView({
               </p>
             </div>
           ) : (
-            items.map((req) => {
-              const isUpdating = updatingIds.includes(req.id);
+            items.map((group) => {
+              const isUpdating = group.requestIds.some((id) =>
+                updatingIds.includes(id)
+              );
+
+              const latestGuests = group.requests
+                .slice(-3)
+                .map((request) => request.guestName || "Guest");
 
               return (
                 <div
-                  key={req.id}
+                  key={group.groupKey}
                   className={`rounded-2xl border border-white/5 bg-[#0A0C12] p-4 transition duration-200 hover:border-white/10 ${glowMap[type]}`}
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <p className="truncate text-lg font-semibold text-white">
-                        {req.itemName}
-                        {req.quantity ? ` x${req.quantity}` : ""}
+                        {group.itemName}
                       </p>
 
                       <p className="mt-1 text-sm text-gray-400">
-                        {req.guestName || "Guest"}
+                        {group.totalQuantity} total • {group.orderCount}{" "}
+                        {group.orderCount === 1 ? "order" : "orders"}
                       </p>
                     </div>
 
@@ -118,39 +118,42 @@ export default function QueueView({
 
                   <div className="mt-3">
                     <div
-                      className={`h-1.5 rounded-full ${
-                        type === "pending"
-                          ? "bg-yellow-500/70"
-                          : type === "preparing"
-                          ? "bg-blue-500/70"
-                          : "bg-green-500/70"
-                      }`}
+                      className={`h-1.5 rounded-full ${accentBarMap[type]}`}
                     />
                   </div>
 
-                  <div className="mt-4">
-                    {type !== "ready" ? (
+                  <div className="mt-3 rounded-xl border border-white/5 bg-white/[0.03] px-3 py-2">
+                    <p className="text-[11px] uppercase tracking-wide text-white/35">
+                      Recent guests
+                    </p>
+                    <p className="mt-1 text-sm text-gray-300">
+                      {latestGuests.join(", ")}
+                    </p>
+                  </div>
+
+                  <div className="mt-4 flex gap-2">
+                    {type === "pending" && (
                       <button
-                        onClick={() =>
-                          type === "pending"
-                            ? onStartPreparing(req.id)
-                            : onMarkReady(req.id)
-                        }
+                        onClick={() => onStartPreparing(group.requestIds)}
                         disabled={isUpdating}
-                        className={`w-full rounded-full py-2.5 text-sm font-medium text-white transition active:scale-95 disabled:cursor-not-allowed disabled:bg-gray-300 disabled:text-gray-500 ${
-                          type === "pending"
-                            ? "bg-[#FF3D9A] hover:opacity-90"
-                            : "bg-[#7A3FFF] hover:opacity-90"
-                        }`}
+                        className="flex-1 rounded-full bg-yellow-500 px-4 py-2.5 text-sm font-medium text-black transition hover:opacity-90 active:scale-95 disabled:cursor-not-allowed disabled:bg-gray-300 disabled:text-gray-500"
                       >
-                        {isUpdating
-                          ? "Updating..."
-                          : type === "pending"
-                          ? "Start Preparing"
-                          : "Mark Ready"}
+                        {isUpdating ? "Updating..." : "Start Preparing"}
                       </button>
-                    ) : (
-                      <div className="rounded-full bg-green-500/10 px-3 py-2 text-center text-sm font-medium text-green-300">
+                    )}
+
+                    {type === "preparing" && (
+                      <button
+                        onClick={() => onMarkReady(group.requestIds)}
+                        disabled={isUpdating}
+                        className="flex-1 rounded-full bg-[#508CFF] px-4 py-2.5 text-sm font-medium text-white transition hover:opacity-90 active:scale-95 disabled:cursor-not-allowed disabled:bg-gray-300 disabled:text-gray-500"
+                      >
+                        {isUpdating ? "Updating..." : "Mark Ready"}
+                      </button>
+                    )}
+
+                    {type === "ready" && (
+                      <div className="flex-1 rounded-full bg-green-500/10 px-4 py-2.5 text-center text-sm font-medium text-green-300">
                         Ready for pickup
                       </div>
                     )}

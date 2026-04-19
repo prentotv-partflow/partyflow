@@ -12,7 +12,7 @@ import {
   updateDoc,
 } from "firebase/firestore";
 import QueueView from "@/app/components/QueueView";
-import { Request } from "@/app/types/queue";
+import { GroupedRequestCard, Request, Status } from "@/app/types/queue";
 
 type ToastType = "success" | "error";
 
@@ -20,6 +20,51 @@ type ToastState = {
   message: string;
   type: ToastType;
 } | null;
+
+function getCreatedAtValue(createdAt: any) {
+  return createdAt?.seconds ?? 0;
+}
+
+function groupRequestsByItem(
+  items: Request[],
+  status: Status
+): GroupedRequestCard[] {
+  const groups = new Map<string, GroupedRequestCard>();
+
+  for (const request of items) {
+    const normalizedItemName = request.itemName.trim();
+    const groupKey = `${status}__${normalizedItemName.toLowerCase()}`;
+
+    const existingGroup = groups.get(groupKey);
+
+    if (existingGroup) {
+      existingGroup.requests.push(request);
+      existingGroup.requestIds.push(request.id);
+      existingGroup.orderCount += 1;
+      existingGroup.totalQuantity += request.quantity ?? 1;
+
+      const requestCreatedAt = getCreatedAtValue(request.createdAt);
+      const latestCreatedAt = getCreatedAtValue(existingGroup.latestCreatedAt);
+
+      if (requestCreatedAt >= latestCreatedAt) {
+        existingGroup.latestCreatedAt = request.createdAt;
+      }
+    } else {
+      groups.set(groupKey, {
+        groupKey,
+        itemName: normalizedItemName,
+        status,
+        totalQuantity: request.quantity ?? 1,
+        orderCount: 1,
+        requestIds: [request.id],
+        requests: [request],
+        latestCreatedAt: request.createdAt,
+      });
+    }
+  }
+
+  return Array.from(groups.values());
+}
 
 export default function QueueTab() {
   const searchParams = useSearchParams();
@@ -73,57 +118,89 @@ export default function QueueTab() {
     return () => clearTimeout(timeout);
   }, [toast]);
 
-  const pending = useMemo(
+  const pendingRequests = useMemo(
     () => requests.filter((request) => request.status === "pending"),
     [requests]
   );
 
-  const preparing = useMemo(
+  const preparingRequests = useMemo(
     () => requests.filter((request) => request.status === "preparing"),
     [requests]
   );
 
-  const ready = useMemo(
+  const readyRequests = useMemo(
     () => requests.filter((request) => request.status === "ready"),
     [requests]
   );
 
+  const pendingGroups = useMemo(
+    () => groupRequestsByItem(pendingRequests, "pending"),
+    [pendingRequests]
+  );
+
+  const preparingGroups = useMemo(
+    () => groupRequestsByItem(preparingRequests, "preparing"),
+    [preparingRequests]
+  );
+
+  const readyGroups = useMemo(
+    () => groupRequestsByItem(readyRequests, "ready"),
+    [readyRequests]
+  );
+
   const handleStatusUpdate = async (
-    requestId: string,
+    requestIds: string[],
     nextStatus: "preparing" | "ready"
   ) => {
-    if (!eventId) return;
-    if (updatingIds.includes(requestId)) return;
+    if (!eventId || requestIds.length === 0) return;
+
+    const idsToUpdate = requestIds.filter((requestId) => {
+      return !updatingIds.includes(requestId);
+    });
+
+    if (idsToUpdate.length === 0) return;
 
     try {
-      setUpdatingIds((prev) => [...prev, requestId]);
+      setUpdatingIds((prev) => [...prev, ...idsToUpdate]);
 
-      const requestRef = doc(db, "events", eventId, "requests", requestId);
-      await updateDoc(requestRef, { status: nextStatus });
+      await Promise.all(
+        idsToUpdate.map((requestId) => {
+          const requestRef = doc(db, "events", eventId, "requests", requestId);
+          return updateDoc(requestRef, { status: nextStatus });
+        })
+      );
 
       setToast({
         message:
-          nextStatus === "preparing" ? "Moved to preparing" : "Marked ready",
+          nextStatus === "preparing"
+            ? `${idsToUpdate.length} item${
+                idsToUpdate.length === 1 ? "" : "s"
+              } moved to preparing`
+            : `${idsToUpdate.length} item${
+                idsToUpdate.length === 1 ? "" : "s"
+              } marked ready`,
         type: "success",
       });
     } catch (error) {
-      console.error(`Failed to update request ${requestId}:`, error);
+      console.error(`Failed to update grouped requests:`, error);
 
       setToast({
-        message: "Failed to update request",
+        message: "Failed to update request group",
         type: "error",
       });
     } finally {
-      setUpdatingIds((prev) => prev.filter((id) => id !== requestId));
+      setUpdatingIds((prev) =>
+        prev.filter((id) => !idsToUpdate.includes(id))
+      );
     }
   };
 
-  const handleStartPreparing = async (requestId: string) => {
-    await handleStatusUpdate(requestId, "preparing");
+  const handleStartPreparing = async (requestIds: string[]) => {
+    await handleStatusUpdate(requestIds, "preparing");
   };
 
-  const handleMarkReady = async (requestId: string) => {
-    await handleStatusUpdate(requestId, "ready");
+  const handleMarkReady = async (requestIds: string[]) => {
+    await handleStatusUpdate(requestIds, "ready");
   };
 
   if (!eventId) {
@@ -145,9 +222,9 @@ export default function QueueTab() {
   return (
     <>
       <QueueView
-        pending={pending}
-        preparing={preparing}
-        ready={ready}
+        pending={pendingGroups}
+        preparing={preparingGroups}
+        ready={readyGroups}
         onStartPreparing={handleStartPreparing}
         onMarkReady={handleMarkReady}
         updatingIds={updatingIds}
