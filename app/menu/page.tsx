@@ -389,10 +389,7 @@ function MenuContent() {
             </div>
           </div>
 
-          <p className="mt-3 text-center text-xs text-white/38">
-            Requests update automatically in real time.
-          </p>
-        </div>
+            </div>
       </div>
 
       <div className="mx-auto w-full max-w-md space-y-4 px-4 py-4">

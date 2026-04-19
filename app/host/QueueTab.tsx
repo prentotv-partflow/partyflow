@@ -309,10 +309,7 @@ export default function QueueTab() {
                 <h2 className="mt-1 text-lg font-semibold text-white">
                   Request Flow
                 </h2>
-                <p className="mt-1 max-w-xl text-sm leading-6 text-white/60">
-                  Grouping is visual only. Every action still targets explicit
-                  request IDs.
-                </p>
+                
               </div>
 
               <div className="rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-right">
@@ -364,16 +361,7 @@ export default function QueueTab() {
             </div>
           </div>
 
-          <div className="px-4 pb-4 sm:px-5">
-            <div className="rounded-2xl border border-white/6 bg-white/[0.03] px-4 py-3">
-              <p className="text-xs leading-6 text-white/45">
-                Pending and preparing are grouped by item for faster host action.
-                Ready is grouped by guest for pickup clarity. Request ownership
-                and status updates still remain request-ID specific.
-              </p>
-            </div>
           </div>
-        </div>
 
         <QueueView
           pending={pendingGroups}
