@@ -14,6 +14,13 @@ import {
 import QueueView from "@/app/components/QueueView";
 import { Request } from "@/app/types/queue";
 
+type ToastType = "success" | "error";
+
+type ToastState = {
+  message: string;
+  type: ToastType;
+} | null;
+
 export default function QueueTab() {
   const searchParams = useSearchParams();
   const eventId = searchParams.get("event");
@@ -21,6 +28,7 @@ export default function QueueTab() {
   const [requests, setRequests] = useState<Request[]>([]);
   const [loading, setLoading] = useState(true);
   const [updatingIds, setUpdatingIds] = useState<string[]>([]);
+  const [toast, setToast] = useState<ToastState>(null);
 
   useEffect(() => {
     if (!eventId) {
@@ -55,6 +63,16 @@ export default function QueueTab() {
     return () => unsubscribe();
   }, [eventId]);
 
+  useEffect(() => {
+    if (!toast) return;
+
+    const timeout = setTimeout(() => {
+      setToast(null);
+    }, 2000);
+
+    return () => clearTimeout(timeout);
+  }, [toast]);
+
   const pending = useMemo(
     () => requests.filter((request) => request.status === "pending"),
     [requests]
@@ -82,8 +100,19 @@ export default function QueueTab() {
 
       const requestRef = doc(db, "events", eventId, "requests", requestId);
       await updateDoc(requestRef, { status: nextStatus });
+
+      setToast({
+        message:
+          nextStatus === "preparing" ? "Moved to preparing" : "Marked ready",
+        type: "success",
+      });
     } catch (error) {
       console.error(`Failed to update request ${requestId}:`, error);
+
+      setToast({
+        message: "Failed to update request",
+        type: "error",
+      });
     } finally {
       setUpdatingIds((prev) => prev.filter((id) => id !== requestId));
     }
@@ -114,13 +143,26 @@ export default function QueueTab() {
   }
 
   return (
-    <QueueView
-      pending={pending}
-      preparing={preparing}
-      ready={ready}
-      onStartPreparing={handleStartPreparing}
-      onMarkReady={handleMarkReady}
-      updatingIds={updatingIds}
-    />
+    <>
+      <QueueView
+        pending={pending}
+        preparing={preparing}
+        ready={ready}
+        onStartPreparing={handleStartPreparing}
+        onMarkReady={handleMarkReady}
+        updatingIds={updatingIds}
+      />
+
+      {toast && (
+        <div
+          className={`fixed bottom-5 left-1/2 z-50 -translate-x-1/2 rounded-lg px-4 py-2 text-sm text-white shadow-lg transition ${
+            toast.type === "success" ? "bg-black" : "bg-[#7A1D1D]"
+          }`}
+        >
+          {toast.type === "success" ? "✅ " : "❌ "}
+          {toast.message}
+        </div>
+      )}
+    </>
   );
 }
