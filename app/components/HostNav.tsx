@@ -24,42 +24,51 @@ export default function HostNav({
   };
 
   return (
-    <div className="sticky top-0 z-20 border-b border-white/5 bg-[#0A0C12] px-4 py-3">
+    <div className="sticky top-0 z-20 border-b border-white/5 bg-[#0A0C12]/95 backdrop-blur px-4 py-3">
       {/* TOP BAR */}
       <div className="flex items-center justify-between">
-        <h1 className="text-sm font-semibold text-white">PartyFlow Host</h1>
+        <div className="min-w-0">
+          <p className="text-[10px] uppercase tracking-[0.18em] text-white/35">
+            Host Navigation
+          </p>
+          <h1 className="mt-1 text-sm font-semibold text-white">
+            PartyFlow Host
+          </h1>
+        </div>
       </div>
 
       {/* NAV BUTTONS */}
-      <div className="mt-3 flex gap-2 text-xs">
-        <button
-          onClick={() => handleTabChange("queue")}
-          className={`rounded-full px-3 py-1 transition ${
-            activeTab === "queue"
-              ? "bg-white text-black"
-              : "bg-white/10 text-white hover:bg-white/20"
-          }`}
-        >
-          Queue
-        </button>
+      <div className="mt-3 rounded-2xl border border-white/5 bg-white/[0.03] p-1.5">
+        <div className="flex flex-wrap gap-2">
+          <button
+            onClick={() => handleTabChange("queue")}
+            className={`rounded-full px-4 py-2 text-sm font-medium transition ${
+              activeTab === "queue"
+                ? "bg-white text-black shadow-sm"
+                : "bg-white/5 text-white hover:bg-white/10"
+            }`}
+          >
+            Queue
+          </button>
 
-        <button
-          onClick={() => handleTabChange("menu")}
-          className={`rounded-full px-3 py-1 transition ${
-            activeTab === "menu"
-              ? "bg-white text-black"
-              : "bg-white/10 text-white hover:bg-white/20"
-          }`}
-        >
-          Menu
-        </button>
+          <button
+            onClick={() => handleTabChange("menu")}
+            className={`rounded-full px-4 py-2 text-sm font-medium transition ${
+              activeTab === "menu"
+                ? "bg-white text-black shadow-sm"
+                : "bg-white/5 text-white hover:bg-white/10"
+            }`}
+          >
+            Menu
+          </button>
 
-        <button
-          onClick={() => router.push("/my-events")}
-          className="rounded-full bg-white/10 px-3 py-1 text-white transition hover:bg-white/20"
-        >
-          My Events
-        </button>
+          <button
+            onClick={() => router.push("/my-events")}
+            className="rounded-full bg-white/5 px-4 py-2 text-sm font-medium text-white transition hover:bg-white/10"
+          >
+            My Events
+          </button>
+        </div>
       </div>
     </div>
   );

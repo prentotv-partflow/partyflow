@@ -14,21 +14,21 @@ type Props = {
 type ColumnType = "pending" | "preparing" | "ready";
 
 const badgeMap: Record<ColumnType, string> = {
-  pending: "bg-yellow-500/20 text-yellow-300",
-  preparing: "bg-blue-500/20 text-blue-300",
-  ready: "bg-green-500/20 text-green-300",
+  pending: "bg-yellow-500/15 text-yellow-300 border border-yellow-400/20",
+  preparing: "bg-blue-500/15 text-blue-300 border border-blue-400/20",
+  ready: "bg-green-500/15 text-green-300 border border-green-400/20",
 };
 
 const accentBarMap: Record<ColumnType, string> = {
-  pending: "bg-yellow-500/70",
-  preparing: "bg-blue-500/70",
-  ready: "bg-green-500/70",
+  pending: "bg-yellow-500/80",
+  preparing: "bg-blue-500/80",
+  ready: "bg-green-500/80",
 };
 
 const glowMap: Record<ColumnType, string> = {
-  pending: "shadow-[0_0_0_1px_rgba(250,204,21,0.08)]",
-  preparing: "shadow-[0_0_0_1px_rgba(96,165,250,0.08)]",
-  ready: "shadow-[0_0_0_1px_rgba(74,222,128,0.08)]",
+  pending: "shadow-[0_0_0_1px_rgba(250,204,21,0.06)]",
+  preparing: "shadow-[0_0_0_1px_rgba(96,165,250,0.06)]",
+  ready: "shadow-[0_0_0_1px_rgba(74,222,128,0.06)]",
 };
 
 export default function QueueView({
@@ -44,26 +44,30 @@ export default function QueueView({
     items: GroupedRequestCard[],
     type: "pending" | "preparing"
   ) => {
-    const isPendingColumn = type === "pending";
+    const isPending = type === "pending";
     const hasItems = items.length > 0;
 
     return (
-      <div className="flex max-h-[70vh] flex-col rounded-3xl border border-white/5 bg-[#191C24] p-4">
+      <div className="flex max-h-[72vh] flex-col rounded-3xl border border-white/8 bg-[#191C24] p-4 sm:p-5">
+        {/* Column Header */}
         <div className="mb-4 flex items-start justify-between gap-3">
           <div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <h2 className="text-base font-semibold text-white">{title}</h2>
-              {isPendingColumn && hasItems && (
-                <span className="rounded-full border border-yellow-400/20 bg-yellow-500/10 px-2 py-0.5 text-[10px] font-medium text-yellow-300">
+
+              {isPending && hasItems && (
+                <span className="rounded-full border border-yellow-400/20 bg-yellow-500/10 px-2.5 py-1 text-[10px] font-medium text-yellow-300">
                   Needs attention
                 </span>
               )}
             </div>
 
-            <p className="mt-1 text-xs text-white/40">
+            <p className="mt-1 text-xs text-white/35">
               {items.length === 0
                 ? "No active groups"
-                : `${items.length} ${items.length === 1 ? "group" : "groups"}`}
+                : `${items.length} ${
+                    items.length === 1 ? "group" : "groups"
+                  } active`}
             </p>
           </div>
 
@@ -74,10 +78,11 @@ export default function QueueView({
           </span>
         </div>
 
+        {/* Scroll Body */}
         <div className="flex flex-col gap-3 overflow-y-auto pr-1">
           {items.length === 0 ? (
-            <div className="rounded-2xl border border-white/5 bg-[#0A0C12] px-4 py-8 text-center">
-              <p className="text-sm text-white/40">No orders</p>
+            <div className="rounded-2xl border border-white/5 bg-[#0F1218] px-4 py-10 text-center">
+              <p className="text-sm text-white/45">No orders</p>
               <p className="mt-1 text-xs text-white/25">
                 Waiting for activity...
               </p>
@@ -95,8 +100,9 @@ export default function QueueView({
               return (
                 <div
                   key={group.groupKey}
-                  className={`rounded-2xl border border-white/5 bg-[#0A0C12] p-4 transition duration-200 hover:border-white/10 ${glowMap[type]}`}
+                  className={`rounded-2xl border border-white/6 bg-[#0F1218] p-4 transition duration-200 hover:border-white/12 ${glowMap[type]}`}
                 >
+                  {/* Top */}
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <p className="truncate text-lg font-semibold text-white">
@@ -116,27 +122,31 @@ export default function QueueView({
                     </span>
                   </div>
 
-                  <div className="mt-3">
+                  {/* Accent */}
+                  <div className="mt-3 h-1.5 rounded-full bg-white/5 overflow-hidden">
                     <div
-                      className={`h-1.5 rounded-full ${accentBarMap[type]}`}
+                      className={`h-full rounded-full ${accentBarMap[type]}`}
                     />
                   </div>
 
-                  <div className="mt-3 rounded-xl border border-white/5 bg-white/[0.03] px-3 py-2">
-                    <p className="text-[11px] uppercase tracking-wide text-white/35">
+                  {/* Guests */}
+                  <div className="mt-3 rounded-xl border border-white/5 bg-white/[0.03] px-3 py-2.5">
+                    <p className="text-[11px] uppercase tracking-wide text-white/30">
                       Recent guests
                     </p>
+
                     <p className="mt-1 text-sm text-gray-300">
                       {latestGuests.join(", ")}
                     </p>
                   </div>
 
-                  <div className="mt-4 flex gap-2">
+                  {/* CTA */}
+                  <div className="mt-4">
                     {type === "pending" ? (
                       <button
                         onClick={() => onStartPreparing(group.requestIds)}
                         disabled={isUpdating}
-                        className="flex-1 rounded-full bg-yellow-500 px-4 py-2.5 text-sm font-medium text-black transition hover:opacity-90 active:scale-95 disabled:cursor-not-allowed disabled:bg-gray-300 disabled:text-gray-500"
+                        className="w-full rounded-full bg-yellow-500 px-4 py-3 text-sm font-medium text-black transition hover:opacity-90 active:scale-[0.99] disabled:cursor-not-allowed disabled:bg-gray-300 disabled:text-gray-500"
                       >
                         {isUpdating ? "Updating..." : "Start Preparing"}
                       </button>
@@ -144,7 +154,7 @@ export default function QueueView({
                       <button
                         onClick={() => onMarkReady(group.requestIds)}
                         disabled={isUpdating}
-                        className="flex-1 rounded-full bg-[#508CFF] px-4 py-2.5 text-sm font-medium text-white transition hover:opacity-90 active:scale-95 disabled:cursor-not-allowed disabled:bg-gray-300 disabled:text-gray-500"
+                        className="w-full rounded-full bg-[#508CFF] px-4 py-3 text-sm font-medium text-white transition hover:opacity-90 active:scale-[0.99] disabled:cursor-not-allowed disabled:bg-gray-300 disabled:text-gray-500"
                       >
                         {isUpdating ? "Updating..." : "Mark Ready"}
                       </button>
@@ -161,22 +171,26 @@ export default function QueueView({
 
   const renderReadyColumn = (items: ReadyGuestCard[]) => {
     return (
-      <div className="flex max-h-[70vh] flex-col rounded-3xl border border-white/5 bg-[#191C24] p-4">
+      <div className="flex max-h-[72vh] flex-col rounded-3xl border border-white/8 bg-[#191C24] p-4 sm:p-5">
+        {/* Header */}
         <div className="mb-4 flex items-start justify-between gap-3">
           <div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <h2 className="text-base font-semibold text-white">Ready</h2>
+
               {items.length > 0 && (
-                <span className="rounded-full border border-green-400/20 bg-green-500/10 px-2 py-0.5 text-[10px] font-medium text-green-300">
-                  Pickup view
+                <span className="rounded-full border border-green-400/20 bg-green-500/10 px-2.5 py-1 text-[10px] font-medium text-green-300">
+                  Pickup View
                 </span>
               )}
             </div>
 
-            <p className="mt-1 text-xs text-white/40">
+            <p className="mt-1 text-xs text-white/35">
               {items.length === 0
                 ? "No ready guests"
-                : `${items.length} ${items.length === 1 ? "guest" : "guests"} ready`}
+                : `${items.length} ${
+                    items.length === 1 ? "guest" : "guests"
+                  } ready`}
             </p>
           </div>
 
@@ -187,12 +201,13 @@ export default function QueueView({
           </span>
         </div>
 
+        {/* Scroll Body */}
         <div className="flex flex-col gap-3 overflow-y-auto pr-1">
           {items.length === 0 ? (
-            <div className="rounded-2xl border border-white/5 bg-[#0A0C12] px-4 py-8 text-center">
-              <p className="text-sm text-white/40">Nothing ready yet</p>
+            <div className="rounded-2xl border border-white/5 bg-[#0F1218] px-4 py-10 text-center">
+              <p className="text-sm text-white/45">Nothing ready yet</p>
               <p className="mt-1 text-xs text-white/25">
-                Ready items will appear by guest.
+                Ready items appear grouped by guest.
               </p>
             </div>
           ) : (
@@ -210,8 +225,9 @@ export default function QueueView({
               return (
                 <div
                   key={group.groupKey}
-                  className={`rounded-2xl border border-white/5 bg-[#0A0C12] p-4 transition duration-200 hover:border-white/10 ${glowMap.ready}`}
+                  className={`rounded-2xl border border-white/6 bg-[#0F1218] p-4 transition duration-200 hover:border-white/12 ${glowMap.ready}`}
                 >
+                  {/* Top */}
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <p className="truncate text-lg font-semibold text-white">
@@ -224,18 +240,22 @@ export default function QueueView({
                       </p>
                     </div>
 
-                    <span className="shrink-0 rounded-full bg-green-500/20 px-2.5 py-1 text-xs font-medium text-green-300">
+                    <span className="shrink-0 rounded-full bg-green-500/15 border border-green-400/20 px-2.5 py-1 text-xs font-medium text-green-300">
                       Ready Now
                     </span>
                   </div>
 
-                  <div className="mt-3">
-                    <div className={`h-1.5 rounded-full ${accentBarMap.ready}`} />
+                  {/* Accent */}
+                  <div className="mt-3 h-1.5 rounded-full bg-white/5 overflow-hidden">
+                    <div
+                      className={`h-full rounded-full ${accentBarMap.ready}`}
+                    />
                   </div>
 
+                  {/* Items */}
                   <div className="mt-3 rounded-xl border border-white/5 bg-white/[0.03] px-3 py-3">
-                    <p className="text-[11px] uppercase tracking-wide text-white/35">
-                      Pickup items
+                    <p className="text-[11px] uppercase tracking-wide text-white/30">
+                      Pickup Items
                     </p>
 
                     <div className="mt-2 space-y-2">
@@ -247,6 +267,7 @@ export default function QueueView({
                           <span className="truncate text-gray-200">
                             {itemName}
                           </span>
+
                           <span className="shrink-0 rounded-full bg-white/10 px-2 py-0.5 text-xs text-white/70">
                             x{quantity}
                           </span>
@@ -255,7 +276,8 @@ export default function QueueView({
                     </div>
                   </div>
 
-                  <div className="mt-4 rounded-full bg-green-500/10 px-4 py-2.5 text-center text-sm font-medium text-green-300">
+                  {/* Footer */}
+                  <div className="mt-4 rounded-full bg-green-500/10 px-4 py-3 text-center text-sm font-medium text-green-300">
                     Ready for pickup
                   </div>
                 </div>
@@ -274,15 +296,17 @@ export default function QueueView({
 
   if (isEmpty) {
     return (
-      <div className="flex flex-col items-center justify-center py-20 text-center">
-        <p className="text-base font-medium text-white/50">No orders yet</p>
-        <p className="mt-1 text-sm text-white/30">Waiting for guests...</p>
+      <div className="rounded-3xl border border-white/8 bg-[#191C24] px-6 py-16 text-center">
+        <p className="text-base font-medium text-white/55">No orders yet</p>
+        <p className="mt-2 text-sm text-white/30">
+          Waiting for guests to begin ordering.
+        </p>
       </div>
     );
   }
 
   return (
-    <div className="grid grid-cols-1 gap-4 px-4 pb-6 md:grid-cols-3">
+    <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
       {renderItemColumn("Pending", pending, "pending")}
       {renderItemColumn("Preparing", preparing, "preparing")}
       {renderReadyColumn(ready)}

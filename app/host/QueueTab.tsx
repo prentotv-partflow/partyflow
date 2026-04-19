@@ -107,7 +107,10 @@ function groupReadyRequestsByGuest(items: Request[]): ReadyGuestCard[] {
   }
 
   return Array.from(groups.values()).sort((a, b) => {
-    return getCreatedAtValue(b.latestCreatedAt) - getCreatedAtValue(a.latestCreatedAt);
+    return (
+      getCreatedAtValue(b.latestCreatedAt) -
+      getCreatedAtValue(a.latestCreatedAt)
+    );
   });
 }
 
@@ -193,6 +196,9 @@ export default function QueueTab() {
     [readyRequests]
   );
 
+  const totalActiveRequests =
+    pendingRequests.length + preparingRequests.length + readyRequests.length;
+
   const handleStatusUpdate = async (
     requestIds: string[],
     nextStatus: "preparing" | "ready"
@@ -218,8 +224,12 @@ export default function QueueTab() {
       setToast({
         message:
           nextStatus === "preparing"
-            ? `${idsToUpdate.length} item${idsToUpdate.length === 1 ? "" : "s"} moved to preparing`
-            : `${idsToUpdate.length} item${idsToUpdate.length === 1 ? "" : "s"} marked ready`,
+            ? `${idsToUpdate.length} item${
+                idsToUpdate.length === 1 ? "" : "s"
+              } moved to preparing`
+            : `${idsToUpdate.length} item${
+                idsToUpdate.length === 1 ? "" : "s"
+              } marked ready`,
         type: "success",
       });
     } catch (error) {
@@ -246,39 +256,92 @@ export default function QueueTab() {
 
   if (!eventId) {
     return (
-      <div className="flex min-h-[240px] items-center justify-center rounded-3xl border border-white/10 bg-white/5 px-4 py-10 text-sm text-white/60">
-        Missing event context.
+      <div className="rounded-3xl border border-white/10 bg-[#141821] p-5 sm:p-6">
+        <div className="flex min-h-[220px] flex-col items-center justify-center text-center">
+          <p className="text-[10px] uppercase tracking-[0.18em] text-white/35">
+            Queue
+          </p>
+          <h2 className="mt-2 text-lg font-semibold text-white">
+            Missing event context
+          </h2>
+          <p className="mt-2 max-w-sm text-sm text-white/60">
+            Queue data cannot load until a valid event is attached to this host
+            session.
+          </p>
+        </div>
       </div>
     );
   }
 
   if (loading) {
     return (
-      <div className="flex min-h-[240px] items-center justify-center rounded-3xl border border-white/10 bg-white/5 px-4 py-10 text-sm text-white/60">
-        Loading queue...
+      <div className="rounded-3xl border border-white/10 bg-[#141821] p-5 sm:p-6">
+        <div className="flex min-h-[220px] flex-col items-center justify-center text-center">
+          <p className="text-[10px] uppercase tracking-[0.18em] text-[#8FB3FF]">
+            Queue
+          </p>
+          <h2 className="mt-2 text-lg font-semibold text-white">
+            Loading queue
+          </h2>
+          <p className="mt-2 max-w-sm text-sm text-white/60">
+            Pulling live request activity for this event.
+          </p>
+        </div>
       </div>
     );
   }
 
   return (
     <>
-      <QueueView
-        pending={pendingGroups}
-        preparing={preparingGroups}
-        ready={readyGroups}
-        onStartPreparing={handleStartPreparing}
-        onMarkReady={handleMarkReady}
-        updatingIds={updatingIds}
-      />
+      <div className="space-y-4">
+        <div className="rounded-3xl border border-white/10 bg-[#141821] px-4 py-4 sm:px-5">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="text-[10px] uppercase tracking-[0.18em] text-[#8FB3FF]">
+                Live Queue
+              </p>
+              <h2 className="mt-1 text-lg font-semibold text-white">
+                Request Flow
+              </h2>
+              <p className="mt-1 text-sm text-white/60">
+                Grouping is visual only. Every action still targets explicit
+                request IDs.
+              </p>
+            </div>
+
+            <div className="rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-right">
+              <p className="text-[10px] uppercase tracking-[0.18em] text-white/35">
+                Total Requests
+              </p>
+              <p className="mt-1 text-xl font-semibold text-white">
+                {totalActiveRequests}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <QueueView
+          pending={pendingGroups}
+          preparing={preparingGroups}
+          ready={readyGroups}
+          onStartPreparing={handleStartPreparing}
+          onMarkReady={handleMarkReady}
+          updatingIds={updatingIds}
+        />
+      </div>
 
       {toast && (
         <div
-          className={`fixed bottom-5 left-1/2 z-50 -translate-x-1/2 rounded-lg px-4 py-2 text-sm text-white shadow-lg transition ${
-            toast.type === "success" ? "bg-black" : "bg-[#7A1D1D]"
+          className={`fixed bottom-5 left-1/2 z-50 -translate-x-1/2 rounded-2xl border px-4 py-3 text-sm text-white shadow-xl backdrop-blur transition ${
+            toast.type === "success"
+              ? "border-white/10 bg-[#101318]/95"
+              : "border-red-400/20 bg-[#3A1313]/95"
           }`}
         >
-          {toast.type === "success" ? "✅ " : "❌ "}
-          {toast.message}
+          <div className="flex items-center gap-2">
+            <span>{toast.type === "success" ? "✅" : "❌"}</span>
+            <span>{toast.message}</span>
+          </div>
         </div>
       )}
     </>
