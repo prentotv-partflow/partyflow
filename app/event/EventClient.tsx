@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useState, useEffect, useMemo } from "react";
 
@@ -41,7 +42,21 @@ export default function EventClient() {
       <div className="mx-auto flex min-h-[calc(100vh-4rem)] w-full max-w-sm items-center justify-center">
         <div className="w-full overflow-hidden rounded-3xl border border-[#8B5CFF]/15 bg-[#1B1F2C]/95 shadow-[0_10px_30px_rgba(0,0,0,0.28)]">
           <div className="border-b border-white/6 px-6 py-6 text-center">
-            <p className="text-[10px] uppercase tracking-[0.22em] text-[#B8A6FF]">
+            <div className="mx-auto flex w-fit items-center gap-3 rounded-2xl border border-white/8 bg-white/[0.03] px-3 py-2">
+              <Image
+                src="/branding/partyflow-logo-interface.png"
+                alt="PartyFlow logo"
+                width={28}
+                height={28}
+                className="h-7 w-7 object-contain"
+                priority
+              />
+              <span className="text-sm font-semibold tracking-tight text-white">
+                PartyFlow
+              </span>
+            </div>
+
+            <p className="mt-4 text-[10px] uppercase tracking-[0.22em] text-[#B8A6FF]">
               Guest Entry
             </p>
 
