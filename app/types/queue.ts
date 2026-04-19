@@ -19,3 +19,14 @@ export type GroupedRequestCard = {
   requests: Request[];
   latestCreatedAt?: any;
 };
+
+export type ReadyGuestCard = {
+  groupKey: string;
+  guestName: string;
+  status: "ready";
+  totalQuantity: number;
+  orderCount: number;
+  requestIds: string[];
+  requests: Request[];
+  latestCreatedAt?: any;
+};

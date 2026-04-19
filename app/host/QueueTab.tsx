@@ -12,7 +12,12 @@ import {
   updateDoc,
 } from "firebase/firestore";
 import QueueView from "@/app/components/QueueView";
-import { GroupedRequestCard, Request, Status } from "@/app/types/queue";
+import {
+  GroupedRequestCard,
+  ReadyGuestCard,
+  Request,
+  Status,
+} from "@/app/types/queue";
 
 type ToastType = "success" | "error";
 
@@ -64,6 +69,46 @@ function groupRequestsByItem(
   }
 
   return Array.from(groups.values());
+}
+
+function groupReadyRequestsByGuest(items: Request[]): ReadyGuestCard[] {
+  const groups = new Map<string, ReadyGuestCard>();
+
+  for (const request of items) {
+    const normalizedGuestName = (request.guestName || "Guest").trim() || "Guest";
+    const groupKey = `ready__guest__${normalizedGuestName.toLowerCase()}`;
+
+    const existingGroup = groups.get(groupKey);
+
+    if (existingGroup) {
+      existingGroup.requests.push(request);
+      existingGroup.requestIds.push(request.id);
+      existingGroup.orderCount += 1;
+      existingGroup.totalQuantity += request.quantity ?? 1;
+
+      const requestCreatedAt = getCreatedAtValue(request.createdAt);
+      const latestCreatedAt = getCreatedAtValue(existingGroup.latestCreatedAt);
+
+      if (requestCreatedAt >= latestCreatedAt) {
+        existingGroup.latestCreatedAt = request.createdAt;
+      }
+    } else {
+      groups.set(groupKey, {
+        groupKey,
+        guestName: normalizedGuestName,
+        status: "ready",
+        totalQuantity: request.quantity ?? 1,
+        orderCount: 1,
+        requestIds: [request.id],
+        requests: [request],
+        latestCreatedAt: request.createdAt,
+      });
+    }
+  }
+
+  return Array.from(groups.values()).sort((a, b) => {
+    return getCreatedAtValue(b.latestCreatedAt) - getCreatedAtValue(a.latestCreatedAt);
+  });
 }
 
 export default function QueueTab() {
@@ -144,7 +189,7 @@ export default function QueueTab() {
   );
 
   const readyGroups = useMemo(
-    () => groupRequestsByItem(readyRequests, "ready"),
+    () => groupReadyRequestsByGuest(readyRequests),
     [readyRequests]
   );
 
@@ -173,16 +218,12 @@ export default function QueueTab() {
       setToast({
         message:
           nextStatus === "preparing"
-            ? `${idsToUpdate.length} item${
-                idsToUpdate.length === 1 ? "" : "s"
-              } moved to preparing`
-            : `${idsToUpdate.length} item${
-                idsToUpdate.length === 1 ? "" : "s"
-              } marked ready`,
+            ? `${idsToUpdate.length} item${idsToUpdate.length === 1 ? "" : "s"} moved to preparing`
+            : `${idsToUpdate.length} item${idsToUpdate.length === 1 ? "" : "s"} marked ready`,
         type: "success",
       });
     } catch (error) {
-      console.error(`Failed to update grouped requests:`, error);
+      console.error("Failed to update grouped requests:", error);
 
       setToast({
         message: "Failed to update request group",
