@@ -1,33 +1,67 @@
+import Image from "next/image";
 import Link from "next/link";
 
 export default function Home() {
   return (
-    <main className="flex items-center justify-center h-screen bg-black text-white px-6">
-      <div className="text-center max-w-md space-y-6">
-        
-        {/* Brand */}
-        <div className="space-y-2">
-          <h1 className="text-4xl font-bold tracking-tight">
-            PartyFlow
-          </h1>
-          <p className="text-lg text-gray-300">
-            Order. Flow. Enjoy.
-          </p>
+    <main className="min-h-screen overflow-hidden bg-gradient-to-b from-[#05070D] via-[#0A0C12] to-[#120B22] text-white">
+      <div className="mx-auto flex min-h-screen w-full max-w-6xl items-center px-6 py-12">
+        <div className="grid w-full gap-12 lg:grid-cols-2 lg:items-center">
+          {/* LEFT: HERO COPY */}
+          <div className="max-w-xl">
+            <p className="text-[10px] uppercase tracking-[0.26em] text-[#B8A6FF]">
+              Live Event Ordering
+            </p>
+
+            <h1 className="mt-4 text-5xl font-semibold tracking-tight sm:text-6xl">
+              PartyFlow
+            </h1>
+
+            <p className="mt-5 text-lg leading-8 text-white/70 sm:text-xl">
+              Order. Flow. Enjoy.
+            </p>
+
+            <p className="mt-5 max-w-lg text-sm leading-7 text-white/50 sm:text-base">
+              Hosts manage requests in real time. Guests join instantly with a
+              link and order without the bar line chaos.
+            </p>
+
+            <div className="mt-8 flex flex-wrap gap-3">
+              <Link
+                href="/login"
+                className="rounded-full bg-white px-6 py-3 text-sm font-semibold text-black transition hover:bg-gray-200"
+              >
+                Get Started
+              </Link>
+
+              <Link
+                href="/login"
+                className="rounded-full border border-white/10 bg-white/5 px-6 py-3 text-sm font-medium text-white transition hover:bg-white/10"
+              >
+                Host Login
+              </Link>
+            </div>
+
+            <p className="mt-4 text-xs text-white/32">
+              Guests require no sign-in.
+            </p>
+          </div>
+
+          {/* RIGHT: IMPACT LOGO HERO */}
+          <div className="relative flex justify-center lg:justify-end">
+            <div className="absolute h-72 w-72 rounded-full bg-[#8B5CFF]/20 blur-3xl sm:h-96 sm:w-96" />
+
+            <div className="relative rounded-[2rem] border border-white/8 bg-white/[0.03] p-6 backdrop-blur-xl">
+              <Image
+                src="/branding/partyflow-logo-impact.png"
+                alt="PartyFlow logo"
+                width={420}
+                height={420}
+                className="h-auto w-[240px] sm:w-[320px] lg:w-[380px]"
+                priority
+              />
+            </div>
+          </div>
         </div>
-
-        {/* CTA */}
-        <Link
-          href="/login"
-          className="bg-white text-black px-6 py-3 rounded-full font-semibold inline-block hover:opacity-90 transition"
-        >
-          Get Started
-        </Link>
-
-        {/* Future-ready hint (non-functional, optional UX signal) */}
-        <p className="text-xs text-gray-500">
-          Host events instantly. Guests join with a link.
-        </p>
-
       </div>
     </main>
   );
