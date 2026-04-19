@@ -208,205 +208,209 @@ export default function HostContent() {
 
   return (
     <div className="min-h-screen bg-[#0A0C12] text-white">
-      {/* Back */}
-      <div className="px-4 pt-4">
-        <button
-          onClick={() => router.push("/my-events")}
-          className="text-sm text-gray-400 transition hover:text-white"
-        >
-          ← My Events
-        </button>
-      </div>
+      {/* Sticky top shell */}
+      <div className="sticky top-0 z-30 border-b border-white/5 bg-[#0A0C12]/92 backdrop-blur-xl">
+        <div className="mx-auto w-full max-w-6xl px-4 pb-4 pt-4">
+          <button
+            onClick={() => router.push("/my-events")}
+            className="text-sm text-gray-400 transition hover:text-white"
+          >
+            ← My Events
+          </button>
 
-      {/* Global Nav */}
-      <div className={needsSetup ? "pointer-events-none opacity-50" : ""}>
-        <HostNav
-          eventId={eventId}
-          activeTab={activeTab}
-          onNavigate={setActiveTab}
-        />
-      </div>
-
-      {/* Compact Event Header */}
-      <div className="px-4 pt-4">
-        <div className="rounded-xl border border-white/10 bg-white/5 px-4 py-3">
-          <div className="flex items-center justify-between gap-4">
-            <div className="min-w-0">
-              <p className="text-[10px] uppercase tracking-[0.18em] text-white/35">
-                Event
-              </p>
-              <h2 className="mt-1 truncate text-xl font-semibold">
-                {eventData.eventName?.trim() || "Untitled Event"}
-              </h2>
-              <p className="mt-1 text-sm text-gray-400">
-                Host: {eventData.hostName?.trim() || "Not set"}
-              </p>
-            </div>
-
-            <span className="shrink-0 rounded-full bg-[#7A3FFF]/20 px-3 py-1 text-xs text-[#C7B3FF]">
-              Host Dashboard
-            </span>
+          <div className={needsSetup ? "mt-4 pointer-events-none opacity-50" : "mt-4"}>
+            <HostNav
+              eventId={eventId}
+              activeTab={activeTab}
+              onNavigate={setActiveTab}
+            />
           </div>
         </div>
       </div>
 
-      {/* Guest Access Toggle Card */}
-      <div className="px-4 pt-3">
-        <div className="rounded-xl border border-[#508CFF]/20 bg-[#191C24] px-4 py-3">
-          <div className="flex items-center justify-between gap-4">
-            <div className="min-w-0">
-              <p className="text-[10px] uppercase tracking-[0.18em] text-[#8FB3FF]">
-                Guest Access
-              </p>
-              <p className="mt-1 text-sm text-gray-400">
-                Share the guest menu link or QR only when needed.
-              </p>
-            </div>
-
-            <button
-              onClick={handleToggleGuestAccess}
-              className="shrink-0 rounded-full bg-white/10 px-4 py-2 text-sm font-medium text-white transition hover:bg-white/20"
-            >
-              {showGuestAccess ? "Hide" : "Show"}
-            </button>
-          </div>
-
-          {showGuestAccess && (
-            <div className="mt-4 border-t border-white/10 pt-4">
-              <div className="rounded-xl border border-white/10 bg-[#0A0C12] p-3">
-                <p className="mb-2 text-xs text-white/50">Guest Link</p>
-                <p className="break-all text-xs text-gray-300">
-                  {guestUrl || "Generating link..."}
+      {/* Page body */}
+      <div className="mx-auto w-full max-w-6xl px-4 py-4">
+        {/* Compact Event Header */}
+        <div className="pt-1">
+          <div className="rounded-2xl border border-white/10 bg-white/5 px-5 py-4">
+            <div className="flex items-center justify-between gap-4">
+              <div className="min-w-0">
+                <p className="text-[10px] uppercase tracking-[0.18em] text-white/35">
+                  Event
+                </p>
+                <h2 className="mt-1 truncate text-xl font-semibold">
+                  {eventData.eventName?.trim() || "Untitled Event"}
+                </h2>
+                <p className="mt-1 text-sm text-gray-400">
+                  Host: {eventData.hostName?.trim() || "Not set"}
                 </p>
               </div>
 
-              <div className="mt-4 flex flex-wrap gap-2">
-                <button
-                  onClick={handleCopyGuestLink}
-                  disabled={!guestUrl}
-                  className="rounded-full bg-[#508CFF] px-4 py-2 text-sm font-medium text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {copiedGuestLink ? "Copied" : "Copy Link"}
-                </button>
-
-                <button
-                  onClick={() => setShowGuestQR((prev) => !prev)}
-                  className="rounded-full bg-white/10 px-4 py-2 text-sm font-medium text-white transition hover:bg-white/20"
-                >
-                  {showGuestQR ? "Hide QR" : "Show QR"}
-                </button>
-              </div>
-
-              {showGuestQR && (
-                <div className="mt-4 rounded-2xl bg-white p-4 text-center">
-                  <p className="text-sm font-semibold text-black">
-                    Guest Entry QR
-                  </p>
-                  <p className="mt-1 text-xs text-gray-500">
-                    Guests can scan this code to open the event menu.
-                  </p>
-
-                  <div className="my-4 flex justify-center">
-                    <QRCode value={guestUrl || " "} size={160} />
-                  </div>
-
-                  <p className="break-all text-[10px] text-gray-500">
-                    {guestUrl}
-                  </p>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Metadata Setup Prompt */}
-      {needsSetup && (
-        <div className="px-4 pt-3">
-          <div className="rounded-2xl border border-[#FF3D9A]/30 bg-[#191C24] p-4 shadow-sm">
-            <div className="mb-4">
-              <h2 className="text-lg font-semibold text-white">
-                Complete Event Setup
-              </h2>
-              <p className="mt-1 text-sm text-gray-400">
-                Add an event name and host name before continuing.
-              </p>
-            </div>
-
-            <div className="space-y-3">
-              <div>
-                <label className="mb-2 block text-sm text-white/80">
-                  Event Name
-                </label>
-                <input
-                  type="text"
-                  value={eventNameInput}
-                  onChange={(e) => {
-                    setEventNameInput(e.target.value);
-                    if (eventNameError) setEventNameError("");
-                  }}
-                  placeholder="Birthday Bash"
-                  className="w-full rounded-xl border border-white/10 bg-[#0A0C12] px-4 py-3 text-sm text-white outline-none transition placeholder:text-white/30 focus:border-[#7A3FFF]"
-                />
-                {eventNameError ? (
-                  <p className="mt-2 text-xs text-red-400">{eventNameError}</p>
-                ) : null}
-              </div>
-
-              <div>
-                <label className="mb-2 block text-sm text-white/80">
-                  Host Name
-                </label>
-                <input
-                  type="text"
-                  value={hostNameInput}
-                  onChange={(e) => {
-                    setHostNameInput(e.target.value);
-                    if (hostNameError) setHostNameError("");
-                  }}
-                  placeholder="Your Name Goes Here"
-                  className="w-full rounded-xl border border-white/10 bg-[#0A0C12] px-4 py-3 text-sm text-white outline-none transition placeholder:text-white/30 focus:border-[#7A3FFF]"
-                />
-                {hostNameError ? (
-                  <p className="mt-2 text-xs text-red-400">{hostNameError}</p>
-                ) : (
-                  <p className="mt-2 text-xs text-gray-500">
-                    Letters and spaces only.
-                  </p>
-                )}
-              </div>
-
-              <button
-                onClick={handleSaveMetadata}
-                disabled={savingMeta}
-                className="w-full rounded-full bg-[#FF3D9A] px-4 py-3 text-sm font-medium text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {savingMeta ? "Saving..." : "Save Event Details"}
-              </button>
+              <span className="shrink-0 rounded-full bg-[#7A3FFF]/20 px-3 py-1 text-xs text-[#C7B3FF]">
+                Host Dashboard
+              </span>
             </div>
           </div>
         </div>
-      )}
 
-      {/* Main Dashboard Content */}
-      <div className={needsSetup ? "pointer-events-none opacity-50" : ""}>
-        <div className="space-y-4 p-4">
-          {activeTab === "menu" && (
-            <div className="space-y-3 rounded-2xl border border-white/10 bg-white/5 p-4">
+        {/* Guest Access Toggle Card */}
+        <div className="pt-3">
+          <div className="rounded-2xl border border-[#508CFF]/20 bg-[#191C24] px-5 py-4">
+            <div className="flex items-center justify-between gap-4">
+              <div className="min-w-0">
+                <p className="text-[10px] uppercase tracking-[0.18em] text-[#8FB3FF]">
+                  Guest Access
+                </p>
+                <p className="mt-1 text-sm text-gray-400">
+                  Share the guest menu link or QR only when needed.
+                </p>
+              </div>
+
               <button
-                onClick={() => router.push(`/add-menu?event=${eventId}`)}
-                className="rounded-lg bg-white px-4 py-2 font-medium text-black transition hover:bg-gray-200"
+                onClick={handleToggleGuestAccess}
+                className="shrink-0 rounded-full bg-white/10 px-4 py-2 text-sm font-medium text-white transition hover:bg-white/20"
               >
-                Open Menu Manager
+                {showGuestAccess ? "Hide" : "Show"}
               </button>
-
-              <p className="text-sm text-gray-400">
-                Manage inventory and menu items for this event.
-              </p>
             </div>
-          )}
 
-          {activeTab === "queue" && <QueueTab />}
+            {showGuestAccess && (
+              <div className="mt-4 border-t border-white/10 pt-4">
+                <div className="rounded-xl border border-white/10 bg-[#0A0C12] p-3">
+                  <p className="mb-2 text-xs text-white/50">Guest Link</p>
+                  <p className="break-all text-xs text-gray-300">
+                    {guestUrl || "Generating link..."}
+                  </p>
+                </div>
+
+                <div className="mt-4 flex flex-wrap gap-2">
+                  <button
+                    onClick={handleCopyGuestLink}
+                    disabled={!guestUrl}
+                    className="rounded-full bg-[#508CFF] px-4 py-2 text-sm font-medium text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {copiedGuestLink ? "Copied" : "Copy Link"}
+                  </button>
+
+                  <button
+                    onClick={() => setShowGuestQR((prev) => !prev)}
+                    className="rounded-full bg-white/10 px-4 py-2 text-sm font-medium text-white transition hover:bg-white/20"
+                  >
+                    {showGuestQR ? "Hide QR" : "Show QR"}
+                  </button>
+                </div>
+
+                {showGuestQR && (
+                  <div className="mt-4 rounded-2xl bg-white p-4 text-center">
+                    <p className="text-sm font-semibold text-black">
+                      Guest Entry QR
+                    </p>
+                    <p className="mt-1 text-xs text-gray-500">
+                      Guests can scan this code to open the event menu.
+                    </p>
+
+                    <div className="my-4 flex justify-center">
+                      <QRCode value={guestUrl || " "} size={160} />
+                    </div>
+
+                    <p className="break-all text-[10px] text-gray-500">
+                      {guestUrl}
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Metadata Setup Prompt */}
+        {needsSetup && (
+          <div className="pt-3">
+            <div className="rounded-2xl border border-[#FF3D9A]/30 bg-[#191C24] p-4 shadow-sm">
+              <div className="mb-4">
+                <h2 className="text-lg font-semibold text-white">
+                  Complete Event Setup
+                </h2>
+                <p className="mt-1 text-sm text-gray-400">
+                  Add an event name and host name before continuing.
+                </p>
+              </div>
+
+              <div className="space-y-3">
+                <div>
+                  <label className="mb-2 block text-sm text-white/80">
+                    Event Name
+                  </label>
+                  <input
+                    type="text"
+                    value={eventNameInput}
+                    onChange={(e) => {
+                      setEventNameInput(e.target.value);
+                      if (eventNameError) setEventNameError("");
+                    }}
+                    placeholder="Birthday Bash"
+                    className="w-full rounded-xl border border-white/10 bg-[#0A0C12] px-4 py-3 text-sm text-white outline-none transition placeholder:text-white/30 focus:border-[#7A3FFF]"
+                  />
+                  {eventNameError ? (
+                    <p className="mt-2 text-xs text-red-400">{eventNameError}</p>
+                  ) : null}
+                </div>
+
+                <div>
+                  <label className="mb-2 block text-sm text-white/80">
+                    Host Name
+                  </label>
+                  <input
+                    type="text"
+                    value={hostNameInput}
+                    onChange={(e) => {
+                      setHostNameInput(e.target.value);
+                      if (hostNameError) setHostNameError("");
+                    }}
+                    placeholder="Your Name Goes Here"
+                    className="w-full rounded-xl border border-white/10 bg-[#0A0C12] px-4 py-3 text-sm text-white outline-none transition placeholder:text-white/30 focus:border-[#7A3FFF]"
+                  />
+                  {hostNameError ? (
+                    <p className="mt-2 text-xs text-red-400">{hostNameError}</p>
+                  ) : (
+                    <p className="mt-2 text-xs text-gray-500">
+                      Letters and spaces only.
+                    </p>
+                  )}
+                </div>
+
+                <button
+                  onClick={handleSaveMetadata}
+                  disabled={savingMeta}
+                  className="w-full rounded-full bg-[#FF3D9A] px-4 py-3 text-sm font-medium text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {savingMeta ? "Saving..." : "Save Event Details"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Main Dashboard Content */}
+        <div className={needsSetup ? "pointer-events-none opacity-50" : ""}>
+          <div className="space-y-4 pt-4">
+            {activeTab === "menu" && (
+              <div className="space-y-3 rounded-2xl border border-white/10 bg-white/5 p-4">
+                <button
+                  onClick={() => router.push(`/add-menu?event=${eventId}`)}
+                  className="rounded-lg bg-white px-4 py-2 font-medium text-black transition hover:bg-gray-200"
+                >
+                  Open Menu Manager
+                </button>
+
+                <p className="text-sm text-gray-400">
+                  Manage inventory and menu items for this event.
+                </p>
+              </div>
+            )}
+
+            {activeTab === "queue" && <QueueTab />}
+          </div>
         </div>
       </div>
     </div>

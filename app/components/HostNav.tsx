@@ -25,7 +25,7 @@ export default function HostNav({
   };
 
   return (
-    <div className="sticky top-0 z-20 border-b border-white/5 bg-[#0A0C12]/95 px-4 py-3 backdrop-blur">
+    <div className="rounded-3xl border border-white/6 bg-[#0E121B]/92 px-4 py-4 shadow-[0_10px_30px_rgba(0,0,0,0.18)] backdrop-blur-xl sm:px-5">
       <div className="flex items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-3">
           <div className="shrink-0 rounded-2xl border border-white/8 bg-white/[0.03] p-2.5">
@@ -50,7 +50,7 @@ export default function HostNav({
         </div>
       </div>
 
-      <div className="mt-3 rounded-2xl border border-white/5 bg-white/[0.03] p-1.5">
+      <div className="mt-4 rounded-2xl border border-white/5 bg-white/[0.03] p-1.5">
         <div className="flex flex-wrap gap-2">
           <button
             onClick={() => handleTabChange("queue")}
