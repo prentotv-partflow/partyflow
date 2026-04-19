@@ -34,15 +34,15 @@ export default function EventClient() {
   };
 
   return (
-    <div className="min-h-screen bg-[#0A0C12] text-white px-4 py-8 flex items-center justify-center">
+    <div className="min-h-screen bg-gradient-to-b from-[#0A0C12] via-[#12162B] to-[#1B1036] text-white px-4 py-8 flex items-center justify-center">
       <div className="w-full max-w-sm">
-        <div className="rounded-3xl border border-white/8 bg-[#191C24] p-6 shadow-[0_10px_30px_rgba(0,0,0,0.25)]">
+        <div className="rounded-3xl border border-[#8B5CFF]/15 bg-[#1B1F2C] p-6 shadow-[0_10px_30px_rgba(0,0,0,0.28)]">
           <div className="text-center">
-            <p className="text-[10px] uppercase tracking-[0.18em] text-[#8FB3FF]">
+            <p className="text-[10px] uppercase tracking-[0.18em] text-[#B8A6FF]">
               Guest Entry
             </p>
 
-            <h1 className="mt-2 text-2xl font-semibold">
+            <h1 className="mt-2 text-2xl font-semibold text-white">
               Enter Event
             </h1>
 
@@ -58,7 +58,7 @@ export default function EventClient() {
               </label>
 
               <input
-                className="w-full rounded-2xl border border-white/10 bg-[#0F1218] px-4 py-3 text-sm text-white outline-none transition placeholder:text-white/30 focus:border-[#508CFF]/60"
+                className="w-full rounded-2xl border border-white/10 bg-[#101522] px-4 py-3 text-sm text-white outline-none transition placeholder:text-white/30 focus:border-[#8B5CFF]/60"
                 placeholder="Enter your name"
                 value={name}
                 onChange={(e) => setName(e.target.value)}

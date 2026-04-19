@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useMemo, useState, useEffect } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { db } from "../firebase";
 import {
@@ -67,7 +67,6 @@ function MenuContent() {
   const [toast, setToast] = useState<string | null>(null);
   const [checking, setChecking] = useState(true);
 
-  // 🔐 SESSION CHECK
   useEffect(() => {
     if (!eventId) return;
 
@@ -82,7 +81,6 @@ function MenuContent() {
     router.replace(`/event?event=${eventId}`);
   }, [eventId, router]);
 
-  // 🍽️ MENU LISTENER
   useEffect(() => {
     if (!session) return;
 
@@ -105,7 +103,6 @@ function MenuContent() {
     return () => unsubscribe();
   }, [session]);
 
-  // 🧾 MY REQUESTS LISTENER
   useEffect(() => {
     if (!session) return;
 
@@ -132,14 +129,21 @@ function MenuContent() {
     return () => unsubscribe();
   }, [session]);
 
-  // 🔥 REQUEST ITEM
+  useEffect(() => {
+    if (!toast) return;
+
+    const timeout = setTimeout(() => {
+      setToast(null);
+    }, 2200);
+
+    return () => clearTimeout(timeout);
+  }, [toast]);
+
   const handleRequest = async (item: MenuItem) => {
-    if (!session) return;
-    if (loadingItem) return;
+    if (!session || loadingItem) return;
 
     if (item.qty <= 0) {
       setToast("❌ Out of stock");
-      setTimeout(() => setToast(null), 2000);
       return;
     }
 
@@ -161,10 +165,8 @@ function MenuContent() {
       });
 
       setToast(`✅ ${item.name} requested`);
-      setTimeout(() => setToast(null), 2000);
     } catch (err: any) {
       setToast(`❌ ${err.message}`);
-      setTimeout(() => setToast(null), 2500);
     } finally {
       setLoadingItem(null);
     }
@@ -180,18 +182,18 @@ function MenuContent() {
 
   if (checking || !session) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-[#0A0C12] text-white">
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-[#0A0C12] via-[#12162B] to-[#1B1036] text-white">
         Entering event...
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-[#0A0C12] text-white">
+    <div className="min-h-screen bg-gradient-to-b from-[#0A0C12] via-[#12162B] to-[#1B1036] text-white">
       {/* HEADER */}
-      <div className="sticky top-0 z-20 border-b border-white/5 bg-[#0A0C12]/95 backdrop-blur">
+      <div className="sticky top-0 z-20 border-b border-white/5 bg-[#0A0C12]/70 backdrop-blur">
         <div className="mx-auto w-full max-w-md px-4 py-4">
-          <p className="text-center text-[10px] uppercase tracking-[0.18em] text-white/35">
+          <p className="text-center text-[10px] uppercase tracking-[0.18em] text-[#B8A6FF]">
             Guest Menu
           </p>
 
@@ -199,30 +201,32 @@ function MenuContent() {
             Party Menu 🍽️
           </h1>
 
-          <p className="mt-1 text-center text-sm text-gray-400">
+          <p className="mt-1 text-center text-sm text-white/55">
             {session.guestName}
           </p>
         </div>
       </div>
 
       {/* CONTENT */}
-      <div className="mx-auto w-full max-w-md px-4 py-4 space-y-4">
+      <div className="mx-auto w-full max-w-md space-y-4 px-4 py-4">
         {/* MENU CARD */}
-        <div className="rounded-3xl border border-white/8 bg-[#191C24] p-4">
+        <div className="rounded-3xl border border-[#8B5CFF]/15 bg-[#1B1F2C] p-4">
           <div className="mb-4">
-            <p className="text-[10px] uppercase tracking-[0.18em] text-[#8FB3FF]">
+            <p className="text-[10px] uppercase tracking-[0.18em] text-[#B8A6FF]">
               Available Items
             </p>
+
             <h2 className="mt-1 text-lg font-semibold text-white">
               Order from the menu
             </h2>
+
             <p className="mt-1 text-sm text-white/55">
               Tap request to send an item to the host queue.
             </p>
           </div>
 
           {menu.length === 0 ? (
-            <div className="rounded-2xl border border-white/5 bg-[#0F1218] px-4 py-10 text-center">
+            <div className="rounded-2xl border border-white/5 bg-[#101522] px-4 py-10 text-center">
               <p className="text-sm text-white/45">No items available</p>
               <p className="mt-1 text-xs text-white/25">
                 The host has not added menu items yet.
@@ -237,7 +241,7 @@ function MenuContent() {
                 return (
                   <div
                     key={item.id}
-                    className="flex items-center justify-between gap-3 rounded-2xl border border-white/6 bg-[#0F1218] p-4"
+                    className="flex items-center justify-between gap-3 rounded-2xl border border-white/6 bg-[#101522] p-4"
                   >
                     <div className="min-w-0">
                       <p className="truncate text-base font-semibold text-white">
@@ -252,10 +256,10 @@ function MenuContent() {
                     <button
                       onClick={() => handleRequest(item)}
                       disabled={isLoading || isOut}
-                      className={`shrink-0 rounded-full px-4 py-2.5 text-sm font-medium transition ${
+                      className={`shrink-0 rounded-full border px-4 py-2.5 text-sm font-medium transition ${
                         isOut
-                          ? "bg-white/10 text-white/35 cursor-not-allowed"
-                          : "bg-white text-black hover:bg-gray-200"
+                          ? "cursor-not-allowed border-white/10 bg-white/10 text-white/35"
+                          : "border-[#8B5CFF]/20 bg-[#8B5CFF]/22 text-[#E2D9FF] hover:bg-[#8B5CFF]/32"
                       }`}
                     >
                       {isOut ? "Out" : isLoading ? "Requesting..." : "Request"}
@@ -268,15 +272,17 @@ function MenuContent() {
         </div>
 
         {/* REQUESTS CARD */}
-        <div className="rounded-3xl border border-white/8 bg-[#191C24] p-4">
+        <div className="rounded-3xl border border-[#8B5CFF]/15 bg-[#1B1F2C] p-4">
           <div className="mb-4 flex items-start justify-between gap-3">
             <div>
-              <p className="text-[10px] uppercase tracking-[0.18em] text-[#8FB3FF]">
+              <p className="text-[10px] uppercase tracking-[0.18em] text-[#B8A6FF]">
                 Your Activity
               </p>
+
               <h2 className="mt-1 text-lg font-semibold text-white">
                 Your Requests
               </h2>
+
               <p className="mt-1 text-sm text-white/55">
                 Track each request as it moves through the queue.
               </p>
@@ -288,7 +294,7 @@ function MenuContent() {
           </div>
 
           {sortedRequests.length === 0 ? (
-            <div className="rounded-2xl border border-white/5 bg-[#0F1218] px-4 py-10 text-center">
+            <div className="rounded-2xl border border-white/5 bg-[#101522] px-4 py-10 text-center">
               <p className="text-sm text-white/45">No requests yet</p>
               <p className="mt-1 text-xs text-white/25">
                 Your requested items will appear here.
@@ -299,7 +305,7 @@ function MenuContent() {
               {sortedRequests.map((req) => (
                 <div
                   key={req.id}
-                  className="rounded-2xl border border-white/6 bg-[#0F1218] p-4"
+                  className="rounded-2xl border border-white/6 bg-[#101522] p-4"
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
@@ -329,7 +335,7 @@ function MenuContent() {
 
       {/* TOAST */}
       {toast && (
-        <div className="fixed bottom-5 left-1/2 z-50 -translate-x-1/2 rounded-2xl border border-white/10 bg-[#101318]/95 px-4 py-3 text-sm text-white shadow-xl backdrop-blur">
+        <div className="fixed bottom-5 left-1/2 z-50 -translate-x-1/2 rounded-2xl border border-[#8B5CFF]/20 bg-[#25153D]/95 px-4 py-3 text-sm text-white shadow-xl backdrop-blur">
           {toast}
         </div>
       )}
@@ -341,7 +347,7 @@ export default function GuestMenu() {
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen flex items-center justify-center bg-[#0A0C12] text-white">
+        <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-[#0A0C12] via-[#12162B] to-[#1B1036] text-white">
           Loading menu...
         </div>
       }
