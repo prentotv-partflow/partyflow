@@ -15,7 +15,11 @@ type EventDoc = {
   hostName?: string;
   eventName?: string;
   createdAt?: any;
+  isDeleted?: boolean;
+  deletedAt?: any;
 };
+
+const HOST_NAME_REGEX = /^[A-Za-z]+(?: [A-Za-z]+)*$/;
 
 export default function HostContent() {
   const searchParams = useSearchParams();
@@ -30,6 +34,9 @@ export default function HostContent() {
   const [eventNameInput, setEventNameInput] = useState("");
   const [hostNameInput, setHostNameInput] = useState("");
   const [savingMeta, setSavingMeta] = useState(false);
+
+  const [eventNameError, setEventNameError] = useState("");
+  const [hostNameError, setHostNameError] = useState("");
 
   const [guestUrl, setGuestUrl] = useState("");
   const [copiedGuestLink, setCopiedGuestLink] = useState(false);
@@ -54,8 +61,14 @@ export default function HostContent() {
         }
 
         const data = snapshot.data() as EventDoc;
-        setEventData(data);
 
+        if (data.isDeleted === true) {
+          setEventData(null);
+          setLoadingEvent(false);
+          return;
+        }
+
+        setEventData(data);
         setEventNameInput(data.eventName ?? "");
         setHostNameInput(data.hostName ?? "");
         setLoadingEvent(false);
@@ -84,13 +97,43 @@ export default function HostContent() {
     return missingEventName || missingHostName;
   }, [eventData]);
 
+  const normalizeHostName = (value: string) => value.trim().replace(/\s+/g, " ");
+
+  const validateEventName = (value: string) => {
+    if (!value.trim()) {
+      return "Event name is required.";
+    }
+
+    return "";
+  };
+
+  const validateHostName = (value: string) => {
+    const normalized = normalizeHostName(value);
+
+    if (!normalized) {
+      return "Host name is required.";
+    }
+
+    if (!HOST_NAME_REGEX.test(normalized)) {
+      return "Host name can only contain letters and spaces.";
+    }
+
+    return "";
+  };
+
   const handleSaveMetadata = async () => {
     if (!eventId || savingMeta) return;
 
     const cleanEventName = eventNameInput.trim();
-    const cleanHostName = hostNameInput.trim();
+    const cleanHostName = normalizeHostName(hostNameInput);
 
-    if (!cleanEventName || !cleanHostName) {
+    const nextEventNameError = validateEventName(cleanEventName);
+    const nextHostNameError = validateHostName(cleanHostName);
+
+    setEventNameError(nextEventNameError);
+    setHostNameError(nextHostNameError);
+
+    if (nextEventNameError || nextHostNameError) {
       return;
     }
 
@@ -101,6 +144,9 @@ export default function HostContent() {
         eventName: cleanEventName,
         hostName: cleanHostName,
       });
+
+      setEventNameInput(cleanEventName);
+      setHostNameInput(cleanHostName);
     } catch (error) {
       console.error("Failed to save event metadata:", error);
     } finally {
@@ -148,7 +194,7 @@ export default function HostContent() {
       <div className="min-h-screen flex flex-col items-center justify-center bg-[#0A0C12] px-4 text-center text-white">
         <p className="text-lg font-semibold">Event not found</p>
         <p className="mt-2 text-sm text-gray-400">
-          This event may have been removed or is unavailable.
+          This event may have been removed, deleted, or is unavailable.
         </p>
         <button
           onClick={() => router.push("/my-events")}
@@ -286,10 +332,16 @@ export default function HostContent() {
                 <input
                   type="text"
                   value={eventNameInput}
-                  onChange={(e) => setEventNameInput(e.target.value)}
+                  onChange={(e) => {
+                    setEventNameInput(e.target.value);
+                    if (eventNameError) setEventNameError("");
+                  }}
                   placeholder="Birthday Bash"
                   className="w-full rounded-xl border border-white/10 bg-[#0A0C12] px-4 py-3 text-sm text-white outline-none transition placeholder:text-white/30 focus:border-[#7A3FFF]"
                 />
+                {eventNameError ? (
+                  <p className="mt-2 text-xs text-red-400">{eventNameError}</p>
+                ) : null}
               </div>
 
               <div>
@@ -299,19 +351,25 @@ export default function HostContent() {
                 <input
                   type="text"
                   value={hostNameInput}
-                  onChange={(e) => setHostNameInput(e.target.value)}
+                  onChange={(e) => {
+                    setHostNameInput(e.target.value);
+                    if (hostNameError) setHostNameError("");
+                  }}
                   placeholder="Your Name Goes Here"
                   className="w-full rounded-xl border border-white/10 bg-[#0A0C12] px-4 py-3 text-sm text-white outline-none transition placeholder:text-white/30 focus:border-[#7A3FFF]"
                 />
+                {hostNameError ? (
+                  <p className="mt-2 text-xs text-red-400">{hostNameError}</p>
+                ) : (
+                  <p className="mt-2 text-xs text-gray-500">
+                    Letters and spaces only.
+                  </p>
+                )}
               </div>
 
               <button
                 onClick={handleSaveMetadata}
-                disabled={
-                  savingMeta ||
-                  !eventNameInput.trim() ||
-                  !hostNameInput.trim()
-                }
+                disabled={savingMeta}
                 className="w-full rounded-full bg-[#FF3D9A] px-4 py-3 text-sm font-medium text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {savingMeta ? "Saving..." : "Save Event Details"}
