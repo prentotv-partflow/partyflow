@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { db } from "../firebase";
@@ -225,7 +226,7 @@ function MenuContent() {
     );
 
     return () => unsubscribe();
-  }, [session, recentRequestId, router]);
+  }, [session, recentRequestId]);
 
   useEffect(() => {
     if (!toast) return;
@@ -319,6 +320,16 @@ function MenuContent() {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-[#0A0C12] via-[#12162B] to-[#1B1036] px-6 text-center text-white">
         <div className="rounded-3xl border border-white/10 bg-white/5 px-6 py-5 backdrop-blur">
+          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl border border-white/8 bg-white/[0.03] p-3">
+            <Image
+              src="/branding/partyflow-logo-interface.png"
+              alt="PartyFlow logo"
+              width={40}
+              height={40}
+              className="h-10 w-10 object-contain"
+              priority
+            />
+          </div>
           <p className="text-sm font-medium text-white/85">Entering event...</p>
           <p className="mt-1 text-xs text-white/45">
             Restoring your guest session
@@ -332,15 +343,29 @@ function MenuContent() {
     <div className="min-h-screen bg-gradient-to-b from-[#0A0C12] via-[#12162B] to-[#1B1036] text-white">
       <div className="sticky top-0 z-20 border-b border-white/5 bg-[#0A0C12]/75 backdrop-blur-xl">
         <div className="mx-auto w-full max-w-md px-4 py-4">
-          <p className="text-center text-[10px] uppercase tracking-[0.22em] text-[#B8A6FF]">
-            Guest Menu
-          </p>
+          <div className="flex items-center justify-center gap-3">
+            <div className="rounded-2xl border border-white/8 bg-white/[0.03] p-2">
+              <Image
+                src="/branding/partyflow-logo-interface.png"
+                alt="PartyFlow logo"
+                width={28}
+                height={28}
+                className="h-7 w-7 object-contain"
+                priority
+              />
+            </div>
 
-          <h1 className="mt-2 text-center text-[22px] font-semibold tracking-tight">
-            Party Menu
-          </h1>
+            <div className="text-left">
+              <p className="text-[10px] uppercase tracking-[0.22em] text-[#B8A6FF]">
+                Guest Menu
+              </p>
+              <h1 className="mt-1 text-[22px] font-semibold tracking-tight">
+                Party Menu
+              </h1>
+            </div>
+          </div>
 
-          <p className="mt-1 text-center text-sm text-white/55">
+          <p className="mt-3 text-center text-sm text-white/55">
             Welcome, {session.guestName}
           </p>
 
@@ -571,6 +596,16 @@ export default function GuestMenu() {
       fallback={
         <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-[#0A0C12] via-[#12162B] to-[#1B1036] px-6 text-center text-white">
           <div className="rounded-3xl border border-white/10 bg-white/5 px-6 py-5 backdrop-blur">
+            <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl border border-white/8 bg-white/[0.03] p-3">
+              <Image
+                src="/branding/partyflow-logo-interface.png"
+                alt="PartyFlow logo"
+                width={40}
+                height={40}
+                className="h-10 w-10 object-contain"
+                priority
+              />
+            </div>
             <p className="text-sm font-medium text-white/85">Loading menu...</p>
             <p className="mt-1 text-xs text-white/45">
               Pulling live event data

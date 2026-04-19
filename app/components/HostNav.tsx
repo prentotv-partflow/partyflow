@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 
 type Tab = "menu" | "queue";
@@ -24,16 +25,29 @@ export default function HostNav({
   };
 
   return (
-    <div className="sticky top-0 z-20 border-b border-white/5 bg-[#0A0C12]/95 backdrop-blur px-4 py-3">
+    <div className="sticky top-0 z-20 border-b border-white/5 bg-[#0A0C12]/95 px-4 py-3 backdrop-blur">
       {/* TOP BAR */}
-      <div className="flex items-center justify-between">
-        <div className="min-w-0">
-          <p className="text-[10px] uppercase tracking-[0.18em] text-white/35">
-            Host Navigation
-          </p>
-          <h1 className="mt-1 text-sm font-semibold text-white">
-            PartyFlow Host
-          </h1>
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-3">
+          <div className="shrink-0 rounded-2xl border border-white/8 bg-white/[0.03] p-2">
+            <Image
+              src="/branding/partyflow-logo-interface.png"
+              alt="PartyFlow logo"
+              width={28}
+              height={28}
+              className="h-7 w-7 object-contain"
+              priority
+            />
+          </div>
+
+          <div className="min-w-0">
+            <p className="text-[10px] uppercase tracking-[0.18em] text-white/35">
+              Host Navigation
+            </p>
+            <h1 className="mt-1 text-sm font-semibold text-white">
+              PartyFlow Host
+            </h1>
+          </div>
         </div>
       </div>
 
