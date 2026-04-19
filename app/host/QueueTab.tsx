@@ -68,7 +68,9 @@ function groupRequestsByItem(
     }
   }
 
-  return Array.from(groups.values());
+  return Array.from(groups.values()).sort((a, b) => {
+    return getCreatedAtValue(b.latestCreatedAt) - getCreatedAtValue(a.latestCreatedAt);
+  });
 }
 
 function groupReadyRequestsByGuest(items: Request[]): ReadyGuestCard[] {
@@ -199,6 +201,9 @@ export default function QueueTab() {
   const totalActiveRequests =
     pendingRequests.length + preparingRequests.length + readyRequests.length;
 
+  const totalVisibleGroups =
+    pendingGroups.length + preparingGroups.length + readyGroups.length;
+
   const handleStatusUpdate = async (
     requestIds: string[],
     nextStatus: "preparing" | "ready"
@@ -264,7 +269,7 @@ export default function QueueTab() {
           <h2 className="mt-2 text-lg font-semibold text-white">
             Missing event context
           </h2>
-          <p className="mt-2 max-w-sm text-sm text-white/60">
+          <p className="mt-2 max-w-sm text-sm leading-6 text-white/60">
             Queue data cannot load until a valid event is attached to this host
             session.
           </p>
@@ -283,7 +288,7 @@ export default function QueueTab() {
           <h2 className="mt-2 text-lg font-semibold text-white">
             Loading queue
           </h2>
-          <p className="mt-2 max-w-sm text-sm text-white/60">
+          <p className="mt-2 max-w-sm text-sm leading-6 text-white/60">
             Pulling live request activity for this event.
           </p>
         </div>
@@ -294,27 +299,77 @@ export default function QueueTab() {
   return (
     <>
       <div className="space-y-4">
-        <div className="rounded-3xl border border-white/10 bg-[#141821] px-4 py-4 sm:px-5">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <p className="text-[10px] uppercase tracking-[0.18em] text-[#8FB3FF]">
-                Live Queue
+        <div className="overflow-hidden rounded-3xl border border-white/10 bg-[#141821]">
+          <div className="border-b border-white/6 px-4 py-4 sm:px-5">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p className="text-[10px] uppercase tracking-[0.18em] text-[#8FB3FF]">
+                  Live Queue
+                </p>
+                <h2 className="mt-1 text-lg font-semibold text-white">
+                  Request Flow
+                </h2>
+                <p className="mt-1 max-w-xl text-sm leading-6 text-white/60">
+                  Grouping is visual only. Every action still targets explicit
+                  request IDs.
+                </p>
+              </div>
+
+              <div className="rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-right">
+                <p className="text-[10px] uppercase tracking-[0.18em] text-white/35">
+                  Total Requests
+                </p>
+                <p className="mt-1 text-xl font-semibold text-white">
+                  {totalActiveRequests}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3 px-4 py-4 sm:grid-cols-4 sm:px-5">
+            <div className="rounded-2xl border border-yellow-400/12 bg-yellow-500/8 px-4 py-3">
+              <p className="text-[10px] uppercase tracking-[0.16em] text-yellow-200/70">
+                Pending
               </p>
-              <h2 className="mt-1 text-lg font-semibold text-white">
-                Request Flow
-              </h2>
-              <p className="mt-1 text-sm text-white/60">
-                Grouping is visual only. Every action still targets explicit
-                request IDs.
+              <p className="mt-1 text-lg font-semibold text-yellow-300">
+                {pendingRequests.length}
               </p>
             </div>
 
-            <div className="rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-right">
-              <p className="text-[10px] uppercase tracking-[0.18em] text-white/35">
-                Total Requests
+            <div className="rounded-2xl border border-[#508CFF]/12 bg-[#508CFF]/8 px-4 py-3">
+              <p className="text-[10px] uppercase tracking-[0.16em] text-[#BCD2FF]/70">
+                Preparing
               </p>
-              <p className="mt-1 text-xl font-semibold text-white">
-                {totalActiveRequests}
+              <p className="mt-1 text-lg font-semibold text-[#9FC0FF]">
+                {preparingRequests.length}
+              </p>
+            </div>
+
+            <div className="rounded-2xl border border-emerald-400/12 bg-emerald-500/8 px-4 py-3">
+              <p className="text-[10px] uppercase tracking-[0.16em] text-emerald-200/70">
+                Ready
+              </p>
+              <p className="mt-1 text-lg font-semibold text-emerald-300">
+                {readyRequests.length}
+              </p>
+            </div>
+
+            <div className="rounded-2xl border border-white/8 bg-white/5 px-4 py-3">
+              <p className="text-[10px] uppercase tracking-[0.16em] text-white/40">
+                Visible Groups
+              </p>
+              <p className="mt-1 text-lg font-semibold text-white">
+                {totalVisibleGroups}
+              </p>
+            </div>
+          </div>
+
+          <div className="px-4 pb-4 sm:px-5">
+            <div className="rounded-2xl border border-white/6 bg-white/[0.03] px-4 py-3">
+              <p className="text-xs leading-6 text-white/45">
+                Pending and preparing are grouped by item for faster host action.
+                Ready is grouped by guest for pickup clarity. Request ownership
+                and status updates still remain request-ID specific.
               </p>
             </div>
           </div>
@@ -334,7 +389,7 @@ export default function QueueTab() {
         <div
           className={`fixed bottom-5 left-1/2 z-50 -translate-x-1/2 rounded-2xl border px-4 py-3 text-sm text-white shadow-xl backdrop-blur transition ${
             toast.type === "success"
-              ? "border-white/10 bg-[#101318]/95"
+              ? "border-[#508CFF]/20 bg-[#10192C]/95"
               : "border-red-400/20 bg-[#3A1313]/95"
           }`}
         >
