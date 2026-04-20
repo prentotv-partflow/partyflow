@@ -8,8 +8,7 @@ import {
   GoogleAuthProvider,
   signInWithPopup,
 } from "firebase/auth";
-import { doc, serverTimestamp, setDoc } from "firebase/firestore";
-import { auth, db } from "../firebase";
+import { auth } from "../firebase";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -30,19 +29,7 @@ export default function LoginPage() {
       setLoading(true);
 
       const provider = new GoogleAuthProvider();
-      const result = await signInWithPopup(auth, provider);
-      const user = result.user;
-
-      await setDoc(
-        doc(db, "users", user.uid),
-        {
-          uid: user.uid,
-          email: user.email ?? "",
-          name: user.displayName ?? "",
-          createdAt: serverTimestamp(),
-        },
-        { merge: true }
-      );
+      await signInWithPopup(auth, provider);
     } catch (error) {
       console.error("LOGIN FAILED:", error);
       setLoading(false);
