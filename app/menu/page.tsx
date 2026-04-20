@@ -123,9 +123,11 @@ function MenuContent() {
   const [highlightedStatusId, setHighlightedStatusId] = useState<string | null>(
     null
   );
+  const [activityJumpHighlight, setActivityJumpHighlight] = useState(false);
 
   const previousStatusMapRef = useRef<Record<string, RequestItem["status"]>>({});
   const initialSnapshotLoadedRef = useRef(false);
+  const activitySectionRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     if (!eventId) return;
@@ -258,6 +260,16 @@ function MenuContent() {
     return () => clearTimeout(timeout);
   }, [highlightedStatusId]);
 
+  useEffect(() => {
+    if (!activityJumpHighlight) return;
+
+    const timeout = setTimeout(() => {
+      setActivityJumpHighlight(false);
+    }, 1600);
+
+    return () => clearTimeout(timeout);
+  }, [activityJumpHighlight]);
+
   const handleRequest = async (item: MenuItem) => {
     if (!session || loadingItem) return;
 
@@ -315,6 +327,19 @@ function MenuContent() {
       (req) => req.status === "pending" || req.status === "preparing"
     ).length;
   }, [sortedRequests]);
+
+  const hasTrackedRequests = activeCount > 0 || readyCount > 0;
+
+  const handleViewRequests = () => {
+    if (!hasTrackedRequests || !activitySectionRef.current) return;
+
+    activitySectionRef.current.scrollIntoView({
+      behavior: "smooth",
+      block: "start",
+    });
+
+    setActivityJumpHighlight(true);
+  };
 
   if (checking || !session) {
     return (
@@ -389,7 +414,18 @@ function MenuContent() {
             </div>
           </div>
 
+          {hasTrackedRequests ? (
+            <div className="mt-3 flex justify-center">
+              <button
+                onClick={handleViewRequests}
+                className="inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-sm font-medium text-[#CDB8FF] transition hover:bg-white/5 hover:text-white"
+              >
+                <span>View Requests</span>
+                <span aria-hidden="true">→</span>
+              </button>
             </div>
+          ) : null}
+        </div>
       </div>
 
       <div className="mx-auto w-full max-w-md space-y-4 px-4 py-4">
@@ -473,7 +509,14 @@ function MenuContent() {
           </div>
         </section>
 
-        <section className="overflow-hidden rounded-3xl border border-[#8B5CFF]/15 bg-[#1B1F2C]/95 shadow-[0_10px_30px_rgba(0,0,0,0.22)]">
+        <section
+          ref={activitySectionRef}
+          className={`overflow-hidden rounded-3xl border bg-[#1B1F2C]/95 shadow-[0_10px_30px_rgba(0,0,0,0.22)] transition-all duration-500 ${
+            activityJumpHighlight
+              ? "border-[#B8A6FF]/35 shadow-[0_0_0_1px_rgba(184,166,255,0.16),0_10px_30px_rgba(0,0,0,0.22)]"
+              : "border-[#8B5CFF]/15"
+          }`}
+        >
           <div className="border-b border-white/6 px-4 py-4">
             <div className="flex items-start justify-between gap-3">
               <div>
