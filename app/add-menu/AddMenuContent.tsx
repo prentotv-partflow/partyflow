@@ -5,6 +5,7 @@ import { useSearchParams, useRouter } from "next/navigation";
 import { db } from "../firebase";
 import { formatCurrency } from "../lib/formatCurrency";
 import { STORAGE_KEYS } from "../lib/storageKeys";
+import type { MenuItem } from "../types/menu";
 import {
   collection,
   onSnapshot,
@@ -15,13 +16,6 @@ import {
   runTransaction,
 } from "firebase/firestore";
 import HostNav from "../components/HostNav";
-
-type MenuItem = {
-  id: string;
-  name: string;
-  qty: number;
-  price?: number;
-};
 
 export default function AddMenuContent() {
   const searchParams = useSearchParams();
