@@ -3,6 +3,7 @@
 import Image from "next/image";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useState, useEffect, useMemo } from "react";
+import { setGuestSession } from "../lib/guestSession";
 
 export default function EventClient() {
   const searchParams = useSearchParams();
@@ -32,7 +33,7 @@ export default function EventClient() {
       guestName: trimmedName,
     };
 
-    localStorage.setItem("partyflow_guest_session", JSON.stringify(session));
+    setGuestSession(session);
 
     router.replace(`/menu?event=${eventId}`);
   };
