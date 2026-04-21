@@ -4,6 +4,7 @@ import Image from "next/image";
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { db } from "../firebase";
+import { getGuestSession } from "../lib/guestSession";
 import {
   collection,
   serverTimestamp,
@@ -40,15 +41,6 @@ type CartItem = {
   quantity: number;
   price: number;
 };
-
-const SESSION_KEY = "partyflow_guest_session";
-
-function getSession(): GuestSession | null {
-  if (typeof window === "undefined") return null;
-
-  const raw = localStorage.getItem(SESSION_KEY);
-  return raw ? JSON.parse(raw) : null;
-}
 
 function formatCurrency(value: number) {
   return new Intl.NumberFormat("en-JM", {
@@ -150,7 +142,7 @@ function MenuContent() {
   useEffect(() => {
     if (!eventId) return;
 
-    const existing = getSession();
+    const existing = getGuestSession();
 
     if (existing && existing.eventId === eventId) {
       setSessionState(existing);
