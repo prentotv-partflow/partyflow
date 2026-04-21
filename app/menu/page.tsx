@@ -231,12 +231,6 @@ function MenuContent() {
 
           if (previousStatus !== req.status) {
             setHighlightedStatusId(req.id);
-
-            if (req.status === "preparing") {
-              setToast(`Preparing: ${req.itemName}`);
-            } else if (req.status === "ready") {
-              setToast(`Ready for pickup: ${req.itemName}`);
-            }
           }
         });
 
@@ -333,8 +327,6 @@ function MenuContent() {
         },
       ];
     });
-
-    setToast(`Added to cart: ${item.name}`);
   };
 
   const updateCartQuantity = (itemId: string, nextQuantity: number) => {
@@ -397,11 +389,6 @@ function MenuContent() {
       setRecentRequestIds(createdIds);
       setCart([]);
       setCartOpen(false);
-      setToast(
-        `Order sent: ${createdIds.length} item${
-          createdIds.length === 1 ? "" : "s"
-        } submitted`
-      );
     } catch (err: any) {
       setToast(err?.message || "Failed to submit order");
     } finally {
@@ -781,7 +768,7 @@ function MenuContent() {
         ) : null}
 
         {toast && (
-          <div className="fixed bottom-5 left-1/2 z-50 w-[calc(100%-32px)] max-w-sm -translate-x-1/2 rounded-2xl border border-[#8B5CFF]/20 bg-[#25153D]/95 px-4 py-3 text-sm text-white shadow-2xl backdrop-blur">
+          <div className="fixed bottom-5 left-1/2 z-50 w-[calc(100%-32px)] max-w-sm -translate-x-1/2 rounded-2xl border border-red-400/25 bg-[#3A1313]/95 px-4 py-3 text-sm text-white shadow-2xl backdrop-blur">
             <p className="text-center font-medium">{toast}</p>
           </div>
         )}
