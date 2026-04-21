@@ -1,4 +1,8 @@
-export type Status = "pending" | "preparing" | "ready";
+export type Status =
+  | "pending"
+  | "preparing"
+  | "ready"
+  | "completed";
 
 export type Request = {
   id: string;

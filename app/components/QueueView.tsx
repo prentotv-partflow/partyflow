@@ -8,6 +8,7 @@ type Props = {
   ready: ReadyGuestCard[];
   onStartPreparing: (requestIds: string[]) => void;
   onMarkReady: (requestIds: string[]) => void;
+  onCompletePickup: (requestIds: string[]) => void;
   updatingIds?: string[];
 };
 
@@ -62,6 +63,7 @@ export default function QueueView({
   ready,
   onStartPreparing,
   onMarkReady,
+  onCompletePickup,
   updatingIds = [],
 }: Props) {
   const renderItemColumn = (
@@ -76,7 +78,6 @@ export default function QueueView({
       <div
         className={`flex max-h-[72vh] flex-col rounded-3xl border bg-[#191C24] p-4 sm:p-5 ${columnShellMap[type]}`}
       >
-        {/* Column Header */}
         <div className="mb-4 flex items-start justify-between gap-3 border-b border-white/6 pb-4">
           <div>
             <div className="flex flex-wrap items-center gap-2">
@@ -107,7 +108,6 @@ export default function QueueView({
           </span>
         </div>
 
-        {/* Scroll Body */}
         <div className="flex flex-col gap-3 overflow-y-auto pr-1">
           {items.length === 0 ? (
             <div className="rounded-2xl border border-white/5 bg-[#0F1218] px-4 py-10 text-center">
@@ -133,7 +133,6 @@ export default function QueueView({
                   key={group.groupKey}
                   className={`rounded-2xl border border-white/6 bg-[#0F1218] p-4 transition duration-200 hover:border-white/12 ${glowMap[type]}`}
                 >
-                  {/* Top */}
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <p className="truncate text-lg font-semibold text-white">
@@ -158,14 +157,12 @@ export default function QueueView({
                     </span>
                   </div>
 
-                  {/* Accent */}
                   <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-white/5">
                     <div
                       className={`h-full rounded-full ${accentBarMap[type]}`}
                     />
                   </div>
 
-                  {/* Guests */}
                   <div className="mt-4 rounded-xl border border-white/5 bg-white/[0.03] px-3 py-3">
                     <p className="text-[11px] uppercase tracking-wide text-white/30">
                       Recent guests
@@ -173,13 +170,10 @@ export default function QueueView({
 
                     <p className="mt-1 text-sm text-gray-300">
                       {latestGuests.join(", ")}
-                      {extraGuestCount > 0
-                        ? ` +${extraGuestCount} more`
-                        : ""}
+                      {extraGuestCount > 0 ? ` +${extraGuestCount} more` : ""}
                     </p>
                   </div>
 
-                  {/* Action Hint */}
                   <div className="mt-3 rounded-xl border border-white/5 bg-white/[0.02] px-3 py-2.5">
                     <p className="text-xs text-white/45">
                       {type === "pending"
@@ -188,7 +182,6 @@ export default function QueueView({
                     </p>
                   </div>
 
-                  {/* CTA */}
                   <div className="mt-4">
                     {type === "pending" ? (
                       <button
@@ -222,7 +215,6 @@ export default function QueueView({
       <div
         className={`flex max-h-[72vh] flex-col rounded-3xl border bg-[#191C24] p-4 sm:p-5 ${columnShellMap.ready}`}
       >
-        {/* Header */}
         <div className="mb-4 flex items-start justify-between gap-3 border-b border-white/6 pb-4">
           <div>
             <div className="flex flex-wrap items-center gap-2">
@@ -247,7 +239,6 @@ export default function QueueView({
           </span>
         </div>
 
-        {/* Scroll Body */}
         <div className="flex flex-col gap-3 overflow-y-auto pr-1">
           {items.length === 0 ? (
             <div className="rounded-2xl border border-white/5 bg-[#0F1218] px-4 py-10 text-center">
@@ -260,6 +251,10 @@ export default function QueueView({
             </div>
           ) : (
             items.map((group) => {
+              const isUpdating = group.requestIds.some((id) =>
+                updatingIds.includes(id)
+              );
+
               const uniqueItemLines = group.requests.reduce<
                 Record<string, number>
               >((acc, request) => {
@@ -275,7 +270,6 @@ export default function QueueView({
                   key={group.groupKey}
                   className={`rounded-2xl border border-white/6 bg-[#0F1218] p-4 transition duration-200 hover:border-white/12 ${glowMap.ready}`}
                 >
-                  {/* Top */}
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <p className="truncate text-lg font-semibold text-white">
@@ -298,14 +292,12 @@ export default function QueueView({
                     </span>
                   </div>
 
-                  {/* Accent */}
                   <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-white/5">
                     <div
                       className={`h-full rounded-full ${accentBarMap.ready}`}
                     />
                   </div>
 
-                  {/* Items */}
                   <div className="mt-4 rounded-xl border border-white/5 bg-white/[0.03] px-3 py-3">
                     <p className="text-[11px] uppercase tracking-wide text-white/30">
                       Pickup items
@@ -329,9 +321,20 @@ export default function QueueView({
                     </div>
                   </div>
 
-                  {/* Footer */}
-                  <div className="mt-4 rounded-full border border-emerald-400/15 bg-emerald-500/10 px-4 py-3 text-center text-sm font-medium text-emerald-300">
-                    Ready for pickup
+                  <div className="mt-3 rounded-xl border border-emerald-400/10 bg-emerald-500/5 px-3 py-2.5">
+                    <p className="text-xs text-emerald-200/75">
+                      Complete pickup to clear this guest from the live ready queue.
+                    </p>
+                  </div>
+
+                  <div className="mt-4">
+                    <button
+                      onClick={() => onCompletePickup(group.requestIds)}
+                      disabled={isUpdating}
+                      className="w-full rounded-full bg-emerald-400 px-4 py-3 text-sm font-medium text-black transition hover:opacity-90 active:scale-[0.99] disabled:cursor-not-allowed disabled:bg-gray-300 disabled:text-gray-500"
+                    >
+                      {isUpdating ? "Updating..." : "Complete Pickup"}
+                    </button>
                   </div>
                 </div>
               );

@@ -69,7 +69,10 @@ function groupRequestsByItem(
   }
 
   return Array.from(groups.values()).sort((a, b) => {
-    return getCreatedAtValue(b.latestCreatedAt) - getCreatedAtValue(a.latestCreatedAt);
+    return (
+      getCreatedAtValue(b.latestCreatedAt) -
+      getCreatedAtValue(a.latestCreatedAt)
+    );
   });
 }
 
@@ -206,7 +209,7 @@ export default function QueueTab() {
 
   const handleStatusUpdate = async (
     requestIds: string[],
-    nextStatus: "preparing" | "ready"
+    nextStatus: "preparing" | "ready" | "completed"
   ) => {
     if (!eventId || requestIds.length === 0) return;
 
@@ -232,9 +235,13 @@ export default function QueueTab() {
             ? `${idsToUpdate.length} item${
                 idsToUpdate.length === 1 ? "" : "s"
               } moved to preparing`
+            : nextStatus === "ready"
+            ? `${idsToUpdate.length} item${
+                idsToUpdate.length === 1 ? "" : "s"
+              } marked ready`
             : `${idsToUpdate.length} item${
                 idsToUpdate.length === 1 ? "" : "s"
-              } marked ready`,
+              } completed`,
         type: "success",
       });
     } catch (error) {
@@ -257,6 +264,10 @@ export default function QueueTab() {
 
   const handleMarkReady = async (requestIds: string[]) => {
     await handleStatusUpdate(requestIds, "ready");
+  };
+
+  const handleCompletePickup = async (requestIds: string[]) => {
+    await handleStatusUpdate(requestIds, "completed");
   };
 
   if (!eventId) {
@@ -309,7 +320,6 @@ export default function QueueTab() {
                 <h2 className="mt-1 text-lg font-semibold text-white">
                   Request Flow
                 </h2>
-                
               </div>
 
               <div className="rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-right">
@@ -360,8 +370,7 @@ export default function QueueTab() {
               </p>
             </div>
           </div>
-
-          </div>
+        </div>
 
         <QueueView
           pending={pendingGroups}
@@ -369,6 +378,7 @@ export default function QueueTab() {
           ready={readyGroups}
           onStartPreparing={handleStartPreparing}
           onMarkReady={handleMarkReady}
+          onCompletePickup={handleCompletePickup}
           updatingIds={updatingIds}
         />
       </div>
