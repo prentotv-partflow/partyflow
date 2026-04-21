@@ -4,6 +4,7 @@ import Image from "next/image";
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { db } from "../firebase";
+import { formatCurrency } from "../lib/formatCurrency";
 import { getGuestSession } from "../lib/guestSession";
 import {
   collection,
@@ -41,14 +42,6 @@ type CartItem = {
   quantity: number;
   price: number;
 };
-
-function formatCurrency(value: number) {
-  return new Intl.NumberFormat("en-JM", {
-    style: "currency",
-    currency: "JMD",
-    maximumFractionDigits: 0,
-  }).format(value);
-}
 
 function getStatusBadgeClass(status: RequestItem["status"]) {
   switch (status) {
