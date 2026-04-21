@@ -12,7 +12,12 @@ export function getGuestSession(): GuestSession | null {
   const raw = localStorage.getItem(KEY);
   if (!raw) return null;
 
-  return JSON.parse(raw);
+  try {
+    return JSON.parse(raw) as GuestSession;
+  } catch {
+    localStorage.removeItem(KEY);
+    return null;
+  }
 }
 
 export function setGuestSession(session: GuestSession) {
