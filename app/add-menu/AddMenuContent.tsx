@@ -18,7 +18,16 @@ type MenuItem = {
   id: string;
   name: string;
   qty: number;
+  price?: number;
 };
+
+function formatCurrency(value: number) {
+  return new Intl.NumberFormat("en-JM", {
+    style: "currency",
+    currency: "JMD",
+    maximumFractionDigits: 0,
+  }).format(value);
+}
 
 export default function AddMenuContent() {
   const searchParams = useSearchParams();
@@ -28,12 +37,18 @@ export default function AddMenuContent() {
 
   const [itemName, setItemName] = useState("");
   const [quantity, setQuantity] = useState("");
+  const [price, setPrice] = useState("");
   const [menu, setMenu] = useState<MenuItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(true);
 
+  const [editingPriceId, setEditingPriceId] = useState<string | null>(null);
+  const [editingPriceValue, setEditingPriceValue] = useState("");
+  const [savingPriceId, setSavingPriceId] = useState<string | null>(null);
+
   const nameInputRef = useRef<HTMLInputElement>(null);
   const qtyInputRef = useRef<HTMLInputElement>(null);
+  const priceInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!eventId) return;
@@ -64,21 +79,25 @@ export default function AddMenuContent() {
       return;
     }
 
-    if (tab === "menu") {
-      router.push(`/add-menu?event=${eventId}`);
-    }
+    router.push(`/add-menu?event=${eventId}`);
   };
 
   const addItem = async () => {
-    if (!itemName.trim() || !quantity.trim()) {
+    if (!itemName.trim() || !quantity.trim() || !price.trim()) {
       alert("Please fill in all fields");
       return;
     }
 
     const qtyNumber = Number(quantity);
+    const priceNumber = Number(price);
 
     if (isNaN(qtyNumber) || qtyNumber <= 0) {
       alert("Quantity must be valid");
+      return;
+    }
+
+    if (isNaN(priceNumber) || priceNumber < 0) {
+      alert("Price must be valid");
       return;
     }
 
@@ -102,6 +121,7 @@ export default function AddMenuContent() {
 
           transaction.update(ref, {
             qty: currentQty + qtyNumber,
+            price: priceNumber,
           });
         });
       } else {
@@ -111,6 +131,7 @@ export default function AddMenuContent() {
           transaction.set(ref, {
             name: itemName.trim(),
             qty: qtyNumber,
+            price: priceNumber,
             createdAt: serverTimestamp(),
           });
         });
@@ -118,6 +139,7 @@ export default function AddMenuContent() {
 
       setItemName("");
       setQuantity("");
+      setPrice("");
       setShowSuggestions(false);
       nameInputRef.current?.focus();
     } catch (error) {
@@ -147,6 +169,59 @@ export default function AddMenuContent() {
 
       transaction.update(ref, { qty: newQty });
     });
+  };
+
+  const startPriceEdit = (item: MenuItem) => {
+    setEditingPriceId(item.id);
+    setEditingPriceValue(
+      typeof item.price === "number" ? String(item.price) : ""
+    );
+  };
+
+  const cancelPriceEdit = () => {
+    setEditingPriceId(null);
+    setEditingPriceValue("");
+  };
+
+  const savePrice = async (itemId: string) => {
+    if (!eventId) return;
+
+    const nextPrice = Number(editingPriceValue);
+
+    if (editingPriceValue.trim() === "") {
+      alert("Price is required");
+      return;
+    }
+
+    if (isNaN(nextPrice) || nextPrice < 0) {
+      alert("Price must be valid");
+      return;
+    }
+
+    try {
+      setSavingPriceId(itemId);
+
+      const ref = doc(db, "events", eventId, "menu", itemId);
+
+      await runTransaction(db, async (transaction) => {
+        const snap = await transaction.get(ref);
+
+        if (!snap.exists()) {
+          throw new Error("Item no longer exists");
+        }
+
+        transaction.update(ref, {
+          price: nextPrice,
+        });
+      });
+
+      cancelPriceEdit();
+    } catch (error) {
+      console.error(error);
+      alert("Failed to update price");
+    } finally {
+      setSavingPriceId(null);
+    }
   };
 
   const suggestions = menu.filter((item) =>
@@ -192,8 +267,8 @@ export default function AddMenuContent() {
             </p>
             <h1 className="mt-1 text-2xl font-semibold">Add Menu Items</h1>
             <p className="mt-2 text-sm leading-6 text-white/55">
-              Add new items, merge quantities for existing items, and keep stock
-              updated in real time.
+              Add new items, merge quantities for existing items, update pricing,
+              and keep stock synced in real time.
             </p>
           </div>
 
@@ -201,85 +276,72 @@ export default function AddMenuContent() {
             <div className="mb-4">
               <h2 className="text-lg font-semibold">Add or Restock Items</h2>
               <p className="mt-1 text-sm text-white/55">
-                Existing item names will merge and increase quantity.
+                Existing item names will merge, increase quantity, and update the
+                active price.
               </p>
             </div>
 
             <div className="space-y-3">
-              <div>
-                <label className="mb-2 block text-sm text-white/80">
-                  Item Name
-                </label>
-                <input
-                  ref={nameInputRef}
-                  type="text"
-                  placeholder="Item Name"
-                  className="w-full rounded-2xl border border-white/10 bg-[#0F1218] px-4 py-3 text-sm text-white outline-none transition placeholder:text-white/30 focus:border-[#508CFF]/60"
-                  value={itemName}
-                  onChange={(e) => {
-                    setItemName(e.target.value);
-                    setShowSuggestions(true);
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      e.preventDefault();
-                      qtyInputRef.current?.focus();
-                    }
-                  }}
-                />
-              </div>
+              <input
+                ref={nameInputRef}
+                type="text"
+                placeholder="Item Name"
+                className="w-full rounded-2xl border border-white/10 bg-[#0F1218] px-4 py-3 text-sm text-white outline-none transition placeholder:text-white/30 focus:border-[#508CFF]/60"
+                value={itemName}
+                onChange={(e) => {
+                  setItemName(e.target.value);
+                  setShowSuggestions(true);
+                }}
+              />
 
               {showSuggestions &&
                 itemName &&
                 suggestions.length > 0 &&
                 !exactMatch && (
                   <div className="overflow-hidden rounded-2xl border border-white/10 bg-[#0F1218]">
-                    <div className="border-b border-white/5 px-4 py-2 text-[11px] uppercase tracking-[0.18em] text-white/35">
-                      Suggestions
-                    </div>
-                    <div className="max-h-40 overflow-y-auto">
-                      {suggestions.map((s) => (
-                        <button
-                          key={s.id}
-                          type="button"
-                          className="w-full px-4 py-3 text-left text-sm text-white transition hover:bg-white/5"
-                          onClick={() => {
-                            setItemName(s.name);
-                            setShowSuggestions(false);
-                            qtyInputRef.current?.focus();
-                          }}
-                        >
-                          {s.name}
-                        </button>
-                      ))}
-                    </div>
+                    {suggestions.map((s) => (
+                      <button
+                        key={s.id}
+                        type="button"
+                        className="block w-full px-4 py-2.5 text-left text-sm text-white transition hover:bg-white/5"
+                        onClick={() => {
+                          setItemName(s.name);
+                          setShowSuggestions(false);
+                          qtyInputRef.current?.focus();
+                        }}
+                      >
+                        {s.name}
+                      </button>
+                    ))}
                   </div>
                 )}
 
-              <div>
-                <label className="mb-2 block text-sm text-white/80">
-                  Quantity
-                </label>
+              <div className="grid grid-cols-2 gap-3">
                 <input
                   ref={qtyInputRef}
                   type="number"
-                  placeholder="Quantity"
+                  placeholder="Qty"
                   className="w-full rounded-2xl border border-white/10 bg-[#0F1218] px-4 py-3 text-sm text-white outline-none transition placeholder:text-white/30 focus:border-[#508CFF]/60"
                   value={quantity}
                   onChange={(e) => setQuantity(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      e.preventDefault();
-                      addItem();
-                    }
-                  }}
+                />
+
+                <input
+                  ref={priceInputRef}
+                  type="number"
+                  min="0"
+                  step="1"
+                  placeholder="Price"
+                  className="w-full rounded-2xl border border-white/10 bg-[#0F1218] px-4 py-3 text-sm text-white outline-none transition placeholder:text-white/30 focus:border-[#508CFF]/60"
+                  value={price}
+                  onChange={(e) => setPrice(e.target.value)}
                 />
               </div>
 
               <button
                 onClick={addItem}
-                className="w-full rounded-full bg-white px-4 py-3 text-sm font-medium text-black transition hover:bg-gray-200 disabled:cursor-not-allowed disabled:bg-white/20 disabled:text-white/40"
                 disabled={loading}
+                className="w-full rounded-full bg-white px-4 py-3 text-sm font-medium text-black transition hover:bg-gray-200 disabled:cursor-not-allowed disabled:bg-white/20 disabled:text-white/40"
               >
                 {loading ? "Adding..." : "Add Item"}
               </button>
@@ -287,15 +349,12 @@ export default function AddMenuContent() {
           </div>
 
           <div className="rounded-3xl border border-white/10 bg-[#191C24] p-4 sm:p-5">
-            <div className="mb-4 flex items-start justify-between gap-3">
+            <div className="mb-3 flex items-start justify-between gap-3">
               <div>
                 <p className="text-[10px] uppercase tracking-[0.18em] text-[#8FB3FF]">
                   Current Menu
                 </p>
                 <h2 className="mt-1 text-lg font-semibold">Live Inventory</h2>
-                <p className="mt-1 text-sm text-white/55">
-                  Adjust stock levels instantly or remove items from the menu.
-                </p>
               </div>
 
               <span className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-xs text-white/70">
@@ -304,60 +363,114 @@ export default function AddMenuContent() {
             </div>
 
             {menu.length === 0 ? (
-              <div className="rounded-2xl border border-white/5 bg-[#0F1218] px-4 py-10 text-center">
+              <div className="rounded-2xl border border-white/5 bg-[#0F1218] px-4 py-8 text-center">
                 <p className="text-sm text-white/45">No menu items yet</p>
-                <p className="mt-1 text-xs text-white/25">
-                  Add your first item to begin building the event menu.
-                </p>
               </div>
             ) : (
-              <div className="space-y-3">
-                {menu.map((item) => (
-                  <div
-                    key={item.id}
-                    className="rounded-2xl border border-white/6 bg-[#0F1218] p-4"
-                  >
-                    <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                      <div className="min-w-0">
-                        <p className="truncate text-base font-semibold text-white">
-                          {item.name}
-                        </p>
-                        <p className="mt-1 text-xs text-white/45">
-                          Current stock: {item.qty}
-                        </p>
-                      </div>
+              <div className="space-y-2">
+                {menu.map((item) => {
+                  const isEditingPrice = editingPriceId === item.id;
+                  const isSavingPrice = savingPriceId === item.id;
 
-                      <div className="flex items-center justify-between gap-3 sm:justify-end">
-                        <div className="flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-2 py-2">
-                          <button
-                            onClick={() => updateQty(item.id, -1)}
-                            className="h-8 w-8 rounded-full bg-white/10 text-sm font-medium text-white transition hover:bg-white/15"
-                          >
-                            -
-                          </button>
+                  return (
+                    <div
+                      key={item.id}
+                      className="rounded-2xl border border-white/6 bg-[#0F1218] p-3"
+                    >
+                      <div className="flex flex-col gap-3">
+                        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-semibold text-white">
+                              {item.name}
+                            </p>
 
-                          <span className="min-w-[2rem] text-center text-sm font-medium text-white">
-                            {item.qty}
-                          </span>
+                            <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] text-white/45">
+                              <span>Stock: {item.qty}</span>
+                              <span className="text-white/20">•</span>
+                              <span>
+                                {typeof item.price === "number"
+                                  ? formatCurrency(item.price)
+                                  : "Price not set"}
+                              </span>
+                            </div>
+                          </div>
 
-                          <button
-                            onClick={() => updateQty(item.id, 1)}
-                            className="h-8 w-8 rounded-full bg-white/10 text-sm font-medium text-white transition hover:bg-white/15"
-                          >
-                            +
-                          </button>
+                          <div className="flex flex-wrap items-center gap-2 lg:justify-end">
+                            <div className="flex items-center gap-1 rounded-full border border-white/10 bg-white/5 px-1.5 py-1.5">
+                              <button
+                                onClick={() => updateQty(item.id, -1)}
+                                className="h-7 w-7 rounded-full bg-white/10 text-sm text-white transition hover:bg-white/15"
+                              >
+                                -
+                              </button>
+
+                              <span className="min-w-[1.75rem] text-center text-xs font-medium text-white">
+                                {item.qty}
+                              </span>
+
+                              <button
+                                onClick={() => updateQty(item.id, 1)}
+                                className="h-7 w-7 rounded-full bg-white/10 text-sm text-white transition hover:bg-white/15"
+                              >
+                                +
+                              </button>
+                            </div>
+
+                            <button
+                              onClick={() => startPriceEdit(item)}
+                              className="rounded-full border border-[#508CFF]/20 bg-[#508CFF]/10 px-3 py-2 text-xs font-medium text-[#9FC0FF] transition hover:bg-[#508CFF]/15"
+                            >
+                              Edit Price
+                            </button>
+
+                            <button
+                              onClick={() => handleDelete(item.id)}
+                              className="rounded-full bg-red-500/10 px-3 py-2 text-xs font-medium text-red-300 transition hover:bg-red-500/15"
+                            >
+                              Delete
+                            </button>
+                          </div>
                         </div>
 
-                        <button
-                          onClick={() => handleDelete(item.id)}
-                          className="rounded-full bg-red-500/10 px-4 py-2 text-sm font-medium text-red-300 transition hover:bg-red-500/15"
-                        >
-                          Delete
-                        </button>
+                        {isEditingPrice ? (
+                          <div className="rounded-2xl border border-white/8 bg-white/5 p-3">
+                            <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+                              <input
+                                type="number"
+                                min="0"
+                                step="1"
+                                placeholder="New price"
+                                className="flex-1 rounded-2xl border border-white/10 bg-[#0B0F16] px-4 py-2.5 text-sm text-white outline-none transition placeholder:text-white/30 focus:border-[#508CFF]/60"
+                                value={editingPriceValue}
+                                onChange={(e) =>
+                                  setEditingPriceValue(e.target.value)
+                                }
+                              />
+
+                              <div className="flex gap-2">
+                                <button
+                                  onClick={cancelPriceEdit}
+                                  disabled={isSavingPrice}
+                                  className="rounded-full border border-white/10 bg-white/5 px-3 py-2.5 text-xs font-medium text-white/80 transition hover:bg-white/10"
+                                >
+                                  Cancel
+                                </button>
+
+                                <button
+                                  onClick={() => savePrice(item.id)}
+                                  disabled={isSavingPrice}
+                                  className="rounded-full bg-white px-3 py-2.5 text-xs font-medium text-black transition hover:bg-gray-200"
+                                >
+                                  {isSavingPrice ? "Saving..." : "Save"}
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        ) : null}
                       </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
