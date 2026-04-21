@@ -1,10 +1,5 @@
 import { STORAGE_KEYS } from "./storageKeys";
-
-export type GuestSession = {
-  eventId: string;
-  guestId: string;
-  guestName: string;
-};
+import type { GuestSession } from "../types/session";
 
 export function getGuestSession(): GuestSession | null {
   if (typeof window === "undefined") return null;

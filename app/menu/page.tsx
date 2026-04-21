@@ -4,8 +4,9 @@ import Image from "next/image";
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { db } from "../firebase";
-import { formatCurrency } from "../lib/formatCurrency";
 import { getGuestSession } from "../lib/guestSession";
+import { formatCurrency } from "../lib/formatCurrency";
+import type { GuestSession } from "../types/session";
 import {
   collection,
   serverTimestamp,
@@ -28,12 +29,6 @@ type RequestItem = {
   status: "pending" | "preparing" | "ready";
   guestId: string;
   createdAt?: any;
-};
-
-type GuestSession = {
-  eventId: string;
-  guestId: string;
-  guestName: string;
 };
 
 type CartItem = {
