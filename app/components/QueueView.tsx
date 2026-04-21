@@ -26,25 +26,6 @@ const shellMap: Record<ColumnType, string> = {
   ready: "border-emerald-400/14",
 };
 
-function SummaryPill({
-  label,
-  count,
-  tone,
-}: {
-  label: string;
-  count: number;
-  tone: string;
-}) {
-  return (
-    <div className={`rounded-2xl border px-4 py-3 ${tone}`}>
-      <p className="text-[10px] uppercase tracking-[0.14em] opacity-70">
-        {label}
-      </p>
-      <p className="mt-1 text-xl font-semibold">{count}</p>
-    </div>
-  );
-}
-
 export default function QueueView({
   pending,
   preparing,
@@ -236,32 +217,10 @@ export default function QueueView({
   }
 
   return (
-    <div>
-      <div className="sticky top-0 z-20 mb-4 rounded-3xl border border-white/8 bg-[#191C24]/95 p-3 backdrop-blur-xl">
-        <div className="grid grid-cols-3 gap-3">
-          <SummaryPill
-            label="Pending"
-            count={pending.length}
-            tone="border-yellow-400/15 bg-yellow-500/8 text-yellow-300"
-          />
-          <SummaryPill
-            label="Preparing"
-            count={preparing.length}
-            tone="border-[#508CFF]/15 bg-[#508CFF]/8 text-[#9FC0FF]"
-          />
-          <SummaryPill
-            label="Ready"
-            count={ready.length}
-            tone="border-emerald-400/15 bg-emerald-500/8 text-emerald-300"
-          />
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-        {renderPendingPreparing("Pending", pending, "pending")}
-        {renderPendingPreparing("Preparing", preparing, "preparing")}
-        {renderReady()}
-      </div>
+    <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+      {renderPendingPreparing("Pending", pending, "pending")}
+      {renderPendingPreparing("Preparing", preparing, "preparing")}
+      {renderReady()}
     </div>
   );
 }
