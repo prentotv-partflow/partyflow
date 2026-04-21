@@ -468,31 +468,30 @@ function MenuContent() {
       <div className="min-h-screen bg-gradient-to-b from-[#0A0C12] via-[#12162B] to-[#1B1036] text-white">
         <div className="sticky top-0 z-20 border-b border-white/5 bg-[#0A0C12]/75 backdrop-blur-xl">
           <div className="mx-auto w-full max-w-md px-4 py-4">
-            <div className="flex items-center justify-center gap-3">
-              <div className="rounded-2xl border border-white/8 bg-white/[0.03] p-2">
+            <div className="flex items-start gap-4">
+              <div className="rounded-2xl border border-white/8 bg-white/[0.03] p-2.5">
                 <Image
                   src="/branding/partyflow-logo-interface.png"
                   alt="PartyFlow logo"
-                  width={28}
-                  height={28}
-                  className="h-7 w-7 object-contain"
+                  width={52}
+                  height={52}
+                  className="h-13 w-13 object-contain"
                   priority
                 />
               </div>
 
-              <div className="text-left">
+              <div className="min-w-0 text-left">
                 <p className="text-[10px] uppercase tracking-[0.22em] text-[#B8A6FF]">
                   Guest Menu
                 </p>
-                <h1 className="mt-1 text-[22px] font-semibold tracking-tight">
+                <h1 className="mt-0.5 text-[24px] font-semibold leading-none tracking-tight">
                   Party Menu
                 </h1>
+                <p className="mt-1.5 text-sm text-white/55">
+                  Welcome, {session.guestName}
+                </p>
               </div>
             </div>
-
-            <p className="mt-3 text-center text-sm text-white/55">
-              Welcome, {session.guestName}
-            </p>
 
             <div className="mt-4 grid grid-cols-2 gap-3">
               <div className="rounded-2xl border border-white/8 bg-white/5 px-4 py-3">
