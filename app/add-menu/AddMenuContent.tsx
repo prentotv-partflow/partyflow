@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { db } from "../firebase";
 import { formatCurrency } from "../lib/formatCurrency";
+import { STORAGE_KEYS } from "../lib/storageKeys";
 import {
   collection,
   onSnapshot,
@@ -21,9 +22,6 @@ type MenuItem = {
   qty: number;
   price?: number;
 };
-
-const DELETE_CONFIRMATION_PREF_KEY =
-  "partyflow_skip_menu_item_delete_confirmation";
 
 export default function AddMenuContent() {
   const searchParams = useSearchParams();
@@ -56,7 +54,9 @@ export default function AddMenuContent() {
   useEffect(() => {
     if (typeof window === "undefined") return;
 
-    const stored = localStorage.getItem(DELETE_CONFIRMATION_PREF_KEY);
+    const stored = localStorage.getItem(
+      STORAGE_KEYS.skipMenuDeleteConfirmation
+    );
     setSkipDeleteConfirmation(stored === "true");
   }, []);
 
@@ -186,7 +186,7 @@ export default function AddMenuContent() {
       await deleteDoc(doc(db, "events", eventId, "menu", item.id));
 
       if (deleteDontShowAgain) {
-        localStorage.setItem(DELETE_CONFIRMATION_PREF_KEY, "true");
+        localStorage.setItem(STORAGE_KEYS.skipMenuDeleteConfirmation, "true");
         setSkipDeleteConfirmation(true);
       }
 

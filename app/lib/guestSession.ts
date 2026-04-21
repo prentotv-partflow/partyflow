@@ -1,29 +1,29 @@
+import { STORAGE_KEYS } from "./storageKeys";
+
 export type GuestSession = {
   eventId: string;
   guestId: string;
   guestName: string;
 };
 
-const KEY = "partyflow_guest_session";
-
 export function getGuestSession(): GuestSession | null {
   if (typeof window === "undefined") return null;
 
-  const raw = localStorage.getItem(KEY);
+  const raw = localStorage.getItem(STORAGE_KEYS.guestSession);
   if (!raw) return null;
 
   try {
     return JSON.parse(raw) as GuestSession;
   } catch {
-    localStorage.removeItem(KEY);
+    localStorage.removeItem(STORAGE_KEYS.guestSession);
     return null;
   }
 }
 
 export function setGuestSession(session: GuestSession) {
-  localStorage.setItem(KEY, JSON.stringify(session));
+  localStorage.setItem(STORAGE_KEYS.guestSession, JSON.stringify(session));
 }
 
 export function clearGuestSession() {
-  localStorage.removeItem(KEY);
+  localStorage.removeItem(STORAGE_KEYS.guestSession);
 }
