@@ -76,19 +76,23 @@ function groupRequestsByItem(
   });
 }
 
-function groupReadyRequestsByGuest(items: Request[]): ReadyGuestCard[] {
+function groupReadyRequestsByOrder(items: Request[]): ReadyGuestCard[] {
   const groups = new Map<string, ReadyGuestCard>();
 
   for (const request of items) {
     const normalizedGuestName = (request.guestName || "Guest").trim() || "Guest";
-    const groupKey = `ready__guest__${normalizedGuestName.toLowerCase()}`;
+    const orderKey =
+      request.orderGroupId ||
+      (typeof request.orderNumber === "number"
+        ? `order-number-${request.orderNumber}`
+        : `request-${request.id}`);
 
+    const groupKey = `ready__order__${orderKey}`;
     const existingGroup = groups.get(groupKey);
 
     if (existingGroup) {
       existingGroup.requests.push(request);
       existingGroup.requestIds.push(request.id);
-      existingGroup.orderCount += 1;
       existingGroup.totalQuantity += request.quantity ?? 1;
 
       const requestCreatedAt = getCreatedAtValue(request.createdAt);
@@ -197,7 +201,7 @@ export default function QueueTab() {
   );
 
   const readyGroups = useMemo(
-    () => groupReadyRequestsByGuest(readyRequests),
+    () => groupReadyRequestsByOrder(readyRequests),
     [readyRequests]
   );
 

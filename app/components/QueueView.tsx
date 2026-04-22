@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo, useState } from "react";
 import { GroupedRequestCard, ReadyGuestCard } from "@/app/types/queue";
 
 type Props = {
@@ -44,14 +45,17 @@ function getColumnSummary(type: ColumnType, count: number) {
       return count === 0
         ? "No active groups"
         : `${count} ${count === 1 ? "group" : "groups"} waiting`;
+
     case "preparing":
       return count === 0
         ? "No active groups"
         : `${count} ${count === 1 ? "group" : "groups"} in progress`;
+
     case "ready":
       return count === 0
         ? "No ready guests"
         : `${count} ${count === 1 ? "guest" : "guests"} ready`;
+
     default:
       return "";
   }
@@ -74,6 +78,22 @@ export default function QueueView({
   onCompletePickup,
   updatingIds = [],
 }: Props) {
+  const [readySearch, setReadySearch] = useState("");
+
+  const filteredReady = useMemo(() => {
+    const query = readySearch.trim();
+
+    if (!query) return ready;
+
+    return ready.filter((group) => {
+      const orderNumber = getPrimaryOrderNumber(group.requests);
+
+      if (typeof orderNumber !== "number") return false;
+
+      return String(orderNumber).includes(query);
+    });
+  }, [ready, readySearch]);
+
   const renderItemColumn = (
     title: string,
     items: GroupedRequestCard[],
@@ -183,7 +203,7 @@ export default function QueueView({
                     </p>
                   </div>
 
-                                <div className="mt-4">
+                  <div className="mt-4">
                     {type === "pending" ? (
                       <button
                         onClick={() => onStartPreparing(group.requestIds)}
@@ -216,42 +236,60 @@ export default function QueueView({
       <div
         className={`flex max-h-[72vh] flex-col rounded-3xl border bg-[#191C24] p-4 sm:p-5 ${columnShellMap.ready}`}
       >
-        <div className="mb-4 flex items-start justify-between gap-3 border-b border-white/6 pb-4">
-          <div>
-            <div className="flex flex-wrap items-center gap-2">
-              <h2 className="text-base font-semibold text-white">Ready</h2>
+        <div className="mb-4 border-b border-white/6 pb-4">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 className="text-base font-semibold text-white">Ready</h2>
 
-              {items.length > 0 && (
-                <span className="rounded-full border border-emerald-400/20 bg-emerald-500/10 px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.12em] text-emerald-300">
-                  Pickup view
-                </span>
-              )}
+                {items.length > 0 && (
+                  <span className="rounded-full border border-emerald-400/20 bg-emerald-500/10 px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.12em] text-emerald-300">
+                    Pickup view
+                  </span>
+                )}
+              </div>
+
+              <p className="mt-1 text-xs text-white/35">
+                {getColumnSummary("ready", items.length)}
+              </p>
             </div>
 
-            <p className="mt-1 text-xs text-white/35">
-              {getColumnSummary("ready", items.length)}
-            </p>
+            <span
+              className={`rounded-full px-2.5 py-1 text-xs font-medium ${badgeMap.ready}`}
+            >
+              {items.length}
+            </span>
           </div>
 
-          <span
-            className={`rounded-full px-2.5 py-1 text-xs font-medium ${badgeMap.ready}`}
-          >
-            {items.length}
-          </span>
+          <div className="mt-3">
+            <input
+              type="text"
+              inputMode="numeric"
+              placeholder="Find order #"
+              value={readySearch}
+              onChange={(e) =>
+                setReadySearch(e.target.value.replace(/\D/g, "").slice(0, 3))
+              }
+              className="w-full rounded-2xl border border-white/8 bg-[#0F1218] px-4 py-2.5 text-sm text-white outline-none transition placeholder:text-white/25 focus:border-emerald-400/35"
+            />
+          </div>
         </div>
 
         <div className="flex flex-col gap-3 overflow-y-auto pr-1">
-          {items.length === 0 ? (
+          {filteredReady.length === 0 ? (
             <div className="rounded-2xl border border-white/5 bg-[#0F1218] px-4 py-10 text-center">
               <p className="text-sm font-medium text-white/45">
-                Nothing ready yet
+                {readySearch ? "No matching ready orders" : "Nothing ready yet"}
               </p>
+
               <p className="mt-1 text-xs text-white/25">
-                Ready items appear grouped by guest.
+                {readySearch
+                  ? "Try the 3-digit order number."
+                  : "Ready items appear grouped by guest."}
               </p>
             </div>
           ) : (
-            items.map((group) => {
+            filteredReady.map((group) => {
               const isUpdating = group.requestIds.some((id) =>
                 updatingIds.includes(id)
               );
@@ -330,7 +368,7 @@ export default function QueueView({
                     </div>
                   </div>
 
-                              <div className="mt-4">
+                  <div className="mt-4">
                     <button
                       onClick={() => onCompletePickup(group.requestIds)}
                       disabled={isUpdating}
@@ -368,7 +406,7 @@ export default function QueueView({
     <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
       {renderItemColumn("Pending", pending, "pending")}
       {renderItemColumn("Preparing", preparing, "preparing")}
-      {renderReadyColumn(ready)}
+      {renderReadyColumn(filteredReady)}
     </div>
   );
 }
