@@ -262,6 +262,17 @@ function MenuContent() {
     return () => clearTimeout(timeout);
   }, [activityJumpHighlight]);
 
+  const scrollToActivitySection = () => {
+    if (!activitySectionRef.current) return;
+
+    activitySectionRef.current.scrollIntoView({
+      behavior: "smooth",
+      block: "start",
+    });
+
+    setActivityJumpHighlight(true);
+  };
+
   const getCartQuantityForItem = (itemId: string) => {
     return cart.find((entry) => entry.itemId === itemId)?.quantity ?? 0;
   };
@@ -369,6 +380,12 @@ function MenuContent() {
       setRecentRequestIds(createdIds);
       setCart([]);
       setCartOpen(false);
+
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          scrollToActivitySection();
+        });
+      });
     } catch (err: any) {
       setToast(err?.message || "Failed to submit order");
     } finally {
@@ -407,17 +424,10 @@ function MenuContent() {
     return cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
   }, [cart]);
 
-  const hasTrackedRequests = activeCount > 0 || readyCount > 0;
+  const hasReadyOrders = readyCount > 0;
 
   const handleViewRequests = () => {
-    if (!hasTrackedRequests || !activitySectionRef.current) return;
-
-    activitySectionRef.current.scrollIntoView({
-      behavior: "smooth",
-      block: "start",
-    });
-
-    setActivityJumpHighlight(true);
+    scrollToActivitySection();
   };
 
   if (checking || !session) {
@@ -430,7 +440,7 @@ function MenuContent() {
               alt="PartyFlow logo"
               width={40}
               height={40}
-              className="h-10 w-10 object-contain"
+              className="h-auto w-auto object-contain"
               priority
             />
           </div>
@@ -447,63 +457,94 @@ function MenuContent() {
     <>
       <div className="min-h-screen bg-gradient-to-b from-[#0A0C12] via-[#12162B] to-[#1B1036] text-white">
         <div className="sticky top-0 z-20 border-b border-white/5 bg-[#0A0C12]/75 backdrop-blur-xl">
-          <div className="mx-auto w-full max-w-md px-4 py-4">
-            <div className="flex items-start gap-4">
-              <div className="rounded-2xl border border-white/8 bg-white/[0.03] p-2.5">
+          <div className="mx-auto w-full max-w-md px-4 pb-4 pt-5">
+            <div className="flex items-center gap-4">
+              <div className="rounded-[1.35rem] border border-white/8 bg-white/[0.03] p-3">
                 <Image
                   src="/branding/partyflow-logo-interface.png"
                   alt="PartyFlow logo"
-                  width={52}
-                  height={52}
-                  className="h-13 w-13 object-contain"
+                  width={58}
+                  height={58}
+                  className="h-auto w-auto object-contain"
                   priority
                 />
               </div>
 
-              <div className="min-w-0 text-left">
-                <p className="text-[10px] uppercase tracking-[0.22em] text-[#B8A6FF]">
-                  Guest Menu
-                </p>
-                <h1 className="mt-0.5 text-[24px] font-semibold leading-none tracking-tight">
+                <div className="min-w-0 flex-1 text-left">               
+                <h1 className="mt-1 text-[29px] font-semibold leading-none tracking-tight">
                   Party Menu
                 </h1>
-                <p className="mt-1.5 text-sm text-white/55">
+                <p className="mt-2 text-[15px] text-white/55">
                   Welcome, {session.guestName}
                 </p>
               </div>
             </div>
 
-            <div className="mt-4 grid grid-cols-2 gap-3">
-              <div className="rounded-2xl border border-white/8 bg-white/5 px-4 py-3">
+            <div className="mt-6 grid grid-cols-2 gap-3">
+              <div className="rounded-2xl border border-white/8 bg-white/5 px-4 py-2.5">
                 <p className="text-[10px] uppercase tracking-[0.16em] text-white/40">
                   Active
                 </p>
-                <p className="mt-1 text-lg font-semibold text-white">
+                <p className="mt-0.5 text-base font-semibold text-white">
                   {activeCount}
                 </p>
               </div>
 
-              <div className="rounded-2xl border border-emerald-400/15 bg-emerald-500/8 px-4 py-3">
+              <div className="rounded-2xl border border-emerald-400/15 bg-emerald-500/8 px-4 py-2.5">
                 <p className="text-[10px] uppercase tracking-[0.16em] text-emerald-200/70">
                   Ready
                 </p>
-                <p className="mt-1 text-lg font-semibold text-emerald-300">
+                <p className="mt-0.5 text-base font-semibold text-emerald-300">
                   {readyCount}
                 </p>
               </div>
             </div>
 
-            {hasTrackedRequests ? (
-              <div className="mt-3 flex justify-center">
-                <button
-                  onClick={handleViewRequests}
-                  className="inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-sm font-medium text-[#CDB8FF] transition hover:bg-white/5 hover:text-white"
+            <div className="mt-3">
+              <button
+                onClick={handleViewRequests}
+                className={`flex w-full items-center justify-between rounded-2xl border px-4 py-3 text-left transition ${
+                  hasReadyOrders
+                    ? "animate-pulse border-emerald-400/35 bg-[linear-gradient(135deg,rgba(16,80,64,0.88),rgba(39,26,67,0.92))] shadow-[0_0_0_1px_rgba(52,211,153,0.12),0_0_28px_rgba(16,185,129,0.14)] hover:border-emerald-300/45 hover:shadow-[0_0_0_1px_rgba(52,211,153,0.18),0_0_32px_rgba(16,185,129,0.18)]"
+                    : "border-[#8B5CFF]/30 bg-[#8B5CFF]/18 shadow-[0_0_0_1px_rgba(139,92,255,0.08)] hover:bg-[#8B5CFF]/26"
+                }`}
+              >
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p
+                      className={`text-[10px] uppercase tracking-[0.16em] ${
+                        hasReadyOrders ? "text-emerald-200/90" : "text-[#D7C7FF]"
+                      }`}
+                    >
+                      Your Activity
+                    </p>
+
+                    {hasReadyOrders ? (
+                      <span className="rounded-full border border-emerald-300/20 bg-emerald-400/12 px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.12em] text-emerald-200">
+                        Ready now
+                      </span>
+                    ) : null}
+                  </div>
+
+                  <p className="mt-1 text-sm font-semibold text-white">
+                    {hasReadyOrders
+                      ? "Pickup Ready — View Requests"
+                      : "View Requests"}
+                  </p>
+                </div>
+
+                <span
+                  aria-hidden="true"
+                  className={`rounded-full px-3 py-1 text-sm font-medium ${
+                    hasReadyOrders
+                      ? "border border-emerald-300/20 bg-emerald-400/12 text-emerald-100"
+                      : "border border-[#B8A6FF]/20 bg-white/5 text-[#E9E0FF]"
+                  }`}
                 >
-                  <span>View Requests</span>
-                  <span aria-hidden="true">→</span>
-                </button>
-              </div>
-            ) : null}
+                  →
+                </span>
+              </button>
+            </div>
           </div>
         </div>
 
@@ -887,7 +928,7 @@ export default function GuestMenu() {
                 alt="PartyFlow logo"
                 width={40}
                 height={40}
-                className="h-10 w-10 object-contain"
+                className="h-auto w-auto object-contain"
                 priority
               />
             </div>
