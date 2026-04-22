@@ -10,6 +10,8 @@ export type Request = {
   itemName: string;
   quantity?: number;
   status: Status;
+  orderNumber?: number;
+  orderGroupId?: string;
   createdAt?: any;
 };
 

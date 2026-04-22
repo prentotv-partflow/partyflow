@@ -12,7 +12,7 @@ import {
   serverTimestamp,
   onSnapshot,
   doc,
-  setDoc,
+  runTransaction,
 } from "firebase/firestore";
 
 type MenuItem = {
@@ -22,12 +22,16 @@ type MenuItem = {
   price?: number;
 };
 
+type RequestStatus = "pending" | "preparing" | "ready" | "completed";
+
 type RequestItem = {
   id: string;
   itemName: string;
   quantity: number;
-  status: "pending" | "preparing" | "ready";
+  status: RequestStatus;
   guestId: string;
+  orderNumber?: number;
+  orderGroupId?: string;
   createdAt?: any;
 };
 
@@ -46,6 +50,8 @@ function getStatusBadgeClass(status: RequestItem["status"]) {
       return "border border-[#508CFF]/20 bg-[#508CFF]/12 text-[#9FC0FF]";
     case "ready":
       return "border border-emerald-400/20 bg-emerald-500/10 text-emerald-300";
+    case "completed":
+      return "border border-white/10 bg-white/5 text-white/70";
     default:
       return "border border-white/10 bg-white/5 text-white/70";
   }
@@ -59,19 +65,29 @@ function getStatusLabel(status: RequestItem["status"]) {
       return "Preparing";
     case "ready":
       return "Ready for pickup";
+    case "completed":
+      return "Completed";
     default:
       return status;
   }
 }
 
-function getStatusNote(status: RequestItem["status"]) {
+function getStatusNote(
+  status: RequestItem["status"],
+  orderNumber?: number
+) {
+  const orderText =
+    typeof orderNumber === "number" ? ` order #${orderNumber}` : " your order";
+
   switch (status) {
     case "pending":
       return "Your request is in the queue.";
     case "preparing":
       return "Your item is being prepared.";
     case "ready":
-      return "Pickup at the bar now.";
+      return `Ready for pickup. Pay at bar and give${orderText}.`;
+    case "completed":
+      return `Pickup complete for${orderText}.`;
     default:
       return "";
   }
@@ -85,6 +101,8 @@ function getStatusAccentClass(status: RequestItem["status"]) {
       return "bg-[#508CFF]";
     case "ready":
       return "bg-emerald-400";
+    case "completed":
+      return "bg-white/30";
     default:
       return "bg-white/30";
   }
@@ -98,8 +116,10 @@ function getStatusPriority(status: RequestItem["status"]) {
       return 1;
     case "pending":
       return 2;
-    default:
+    case "completed":
       return 3;
+    default:
+      return 4;
   }
 }
 
@@ -355,27 +375,59 @@ function MenuContent() {
     try {
       setSubmittingCart(true);
 
-      const createdIds: string[] = [];
+      const createdIds = await runTransaction(db, async (transaction) => {
+        const eventRef = doc(db, "events", session.eventId);
+        const eventSnap = await transaction.get(eventRef);
 
-      await Promise.all(
-        cart.map(async (item) => {
-          const requestRef = doc(
-            collection(db, "events", session.eventId, "requests")
-          );
+        const currentNextOrderNumber =
+          typeof eventSnap.data()?.nextOrderNumber === "number"
+            ? eventSnap.data()?.nextOrderNumber
+            : 101;
 
-          createdIds.push(requestRef.id);
+        const orderNumber =
+          currentNextOrderNumber >= 101 && currentNextOrderNumber <= 999
+            ? currentNextOrderNumber
+            : 101;
 
-          await setDoc(requestRef, {
+        const nextOrderNumber = orderNumber >= 999 ? 101 : orderNumber + 1;
+        const orderGroupId = `${session.eventId}_${orderNumber}_${Date.now()}`;
+        const requestCollectionRef = collection(
+          db,
+          "events",
+          session.eventId,
+          "requests"
+        );
+
+        transaction.set(
+          eventRef,
+          {
+            nextOrderNumber,
+          },
+          { merge: true }
+        );
+
+        const ids: string[] = [];
+
+        cart.forEach((item) => {
+          const requestRef = doc(requestCollectionRef);
+
+          ids.push(requestRef.id);
+
+          transaction.set(requestRef, {
             eventId: session.eventId,
             guestId: session.guestId,
             guestName: session.guestName,
             itemName: item.itemName,
             quantity: item.quantity,
             status: "pending",
+            orderNumber,
+            orderGroupId,
             createdAt: serverTimestamp(),
           });
-        })
-      );
+        });
+
+        return ids;
+      });
 
       setRecentRequestIds(createdIds);
       setCart([]);
@@ -393,8 +445,12 @@ function MenuContent() {
     }
   };
 
+  const visibleRequests = useMemo(() => {
+    return requests.filter((req) => req.status !== "completed");
+  }, [requests]);
+
   const sortedRequests = useMemo(() => {
-    return [...requests].sort((a, b) => {
+    return [...visibleRequests].sort((a, b) => {
       const priorityDiff =
         getStatusPriority(a.status) - getStatusPriority(b.status);
 
@@ -404,7 +460,7 @@ function MenuContent() {
       const bTime = b.createdAt?.seconds ?? 0;
       return bTime - aTime;
     });
-  }, [requests]);
+  }, [visibleRequests]);
 
   const readyCount = useMemo(() => {
     return sortedRequests.filter((req) => req.status === "ready").length;
@@ -470,7 +526,7 @@ function MenuContent() {
                 />
               </div>
 
-                <div className="min-w-0 flex-1 text-left">               
+              <div className="min-w-0 flex-1 text-left">
                 <h1 className="mt-1 text-[29px] font-semibold leading-none tracking-tight">
                   Party Menu
                 </h1>
@@ -719,9 +775,11 @@ function MenuContent() {
                             <div className="flex items-start justify-between gap-3">
                               <div className="min-w-0">
                                 <div className="flex flex-wrap items-center gap-2">
-                                  <p className="truncate text-sm font-semibold text-white">
-                                    {req.itemName}
-                                  </p>
+                                  {typeof req.orderNumber === "number" ? (
+                                    <span className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.12em] text-white/60">
+                                      Order #{req.orderNumber}
+                                    </span>
+                                  ) : null}
 
                                   {isRecent ? (
                                     <span className="rounded-full border border-[#8B5CFF]/25 bg-[#8B5CFF]/12 px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.12em] text-[#D7C7FF]">
@@ -729,6 +787,10 @@ function MenuContent() {
                                     </span>
                                   ) : null}
                                 </div>
+
+                                <p className="mt-2 truncate text-sm font-semibold text-white">
+                                  {req.itemName}
+                                </p>
 
                                 <p className="mt-1 text-xs text-white/45">
                                   Quantity: {req.quantity}
@@ -749,7 +811,7 @@ function MenuContent() {
                                 isReady ? "text-emerald-200/90" : "text-white/48"
                               }`}
                             >
-                              {getStatusNote(req.status)}
+                              {getStatusNote(req.status, req.orderNumber)}
                             </p>
                           </div>
                         </div>

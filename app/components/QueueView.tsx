@@ -57,6 +57,14 @@ function getColumnSummary(type: ColumnType, count: number) {
   }
 }
 
+function getPrimaryOrderNumber(requests: { orderNumber?: number }[]) {
+  const found = requests.find(
+    (request) => typeof request.orderNumber === "number"
+  );
+
+  return found?.orderNumber;
+}
+
 export default function QueueView({
   pending,
   preparing,
@@ -143,6 +151,7 @@ export default function QueueView({
                         <span className="rounded-full bg-white/6 px-2.5 py-1 text-xs text-white/75">
                           {group.totalQuantity} total
                         </span>
+
                         <span className="rounded-full bg-white/6 px-2.5 py-1 text-xs text-white/75">
                           {group.orderCount}{" "}
                           {group.orderCount === 1 ? "order" : "orders"}
@@ -174,15 +183,7 @@ export default function QueueView({
                     </p>
                   </div>
 
-                  <div className="mt-3 rounded-xl border border-white/5 bg-white/[0.02] px-3 py-2.5">
-                    <p className="text-xs text-white/45">
-                      {type === "pending"
-                        ? "Start preparing this grouped batch while preserving request-level status updates."
-                        : "Mark this grouped batch ready. Each request still updates by explicit request ID."}
-                    </p>
-                  </div>
-
-                  <div className="mt-4">
+                                <div className="mt-4">
                     {type === "pending" ? (
                       <button
                         onClick={() => onStartPreparing(group.requestIds)}
@@ -264,6 +265,7 @@ export default function QueueView({
               }, {});
 
               const itemEntries = Object.entries(uniqueItemLines);
+              const orderNumber = getPrimaryOrderNumber(group.requests);
 
               return (
                 <div
@@ -272,7 +274,13 @@ export default function QueueView({
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <p className="truncate text-lg font-semibold text-white">
+                      {typeof orderNumber === "number" && (
+                        <span className="rounded-full border border-emerald-400/20 bg-emerald-500/10 px-2.5 py-1 text-[11px] font-semibold tracking-[0.08em] text-emerald-200">
+                          ORDER #{orderNumber}
+                        </span>
+                      )}
+
+                      <p className="mt-2 truncate text-lg font-semibold text-white">
                         {group.guestName}
                       </p>
 
@@ -280,6 +288,7 @@ export default function QueueView({
                         <span className="rounded-full bg-white/6 px-2.5 py-1 text-xs text-white/75">
                           {group.totalQuantity} ready
                         </span>
+
                         <span className="rounded-full bg-white/6 px-2.5 py-1 text-xs text-white/75">
                           {group.orderCount}{" "}
                           {group.orderCount === 1 ? "order" : "orders"}
@@ -321,13 +330,7 @@ export default function QueueView({
                     </div>
                   </div>
 
-                  <div className="mt-3 rounded-xl border border-emerald-400/10 bg-emerald-500/5 px-3 py-2.5">
-                    <p className="text-xs text-emerald-200/75">
-                      Complete pickup to clear this guest from the live ready queue.
-                    </p>
-                  </div>
-
-                  <div className="mt-4">
+                              <div className="mt-4">
                     <button
                       onClick={() => onCompletePickup(group.requestIds)}
                       disabled={isUpdating}
