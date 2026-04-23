@@ -52,6 +52,8 @@ type CartItem = {
   price: number;
 };
 
+type AddFeedbackMode = "idle" | "teach" | "pulse";
+
 function timestampToMillis(value?: FirestoreTimestampLike) {
   if (!value) return 0;
 
@@ -191,10 +193,18 @@ function MenuContent() {
     null
   );
   const [activityJumpHighlight, setActivityJumpHighlight] = useState(false);
+  const [addFeedbackMap, setAddFeedbackMap] = useState<
+    Record<string, AddFeedbackMode>
+  >({});
+  const [taughtAddCount, setTaughtAddCount] = useState(0);
 
   const previousStatusMapRef = useRef<Record<string, RequestStatus>>({});
   const initialSnapshotLoadedRef = useRef(false);
   const activitySectionRef = useRef<HTMLElement | null>(null);
+  const addFeedbackTimeoutsRef = useRef<Record<string, ReturnType<typeof setTimeout>>>(
+    {}
+  );
+  const lastAddAtRef = useRef<Record<string, number>>({});
 
   useEffect(() => {
     if (!eventId) return;
@@ -209,6 +219,14 @@ function MenuContent() {
 
     router.replace(`/event?event=${eventId}`);
   }, [eventId, router]);
+
+  useEffect(() => {
+    return () => {
+      Object.values(addFeedbackTimeoutsRef.current).forEach((timeoutId) => {
+        clearTimeout(timeoutId);
+      });
+    };
+  }, []);
 
   useEffect(() => {
     if (!session) return;
@@ -347,6 +365,62 @@ function MenuContent() {
     return cart.find((entry) => entry.itemId === itemId)?.quantity ?? 0;
   };
 
+  const clearAddFeedback = (itemId: string) => {
+    const existingTimeout = addFeedbackTimeoutsRef.current[itemId];
+
+    if (existingTimeout) {
+      clearTimeout(existingTimeout);
+      delete addFeedbackTimeoutsRef.current[itemId];
+    }
+
+    setAddFeedbackMap((prev) => {
+      if (!prev[itemId] || prev[itemId] === "idle") return prev;
+      return {
+        ...prev,
+        [itemId]: "idle",
+      };
+    });
+  };
+
+  const triggerAddFeedback = (itemId: string) => {
+    const now = Date.now();
+    const lastAddAt = lastAddAtRef.current[itemId] ?? 0;
+    const rapidRepeat = now - lastAddAt < 1500;
+
+    lastAddAtRef.current[itemId] = now;
+
+    if (rapidRepeat) {
+      clearAddFeedback(itemId);
+      return;
+    }
+
+    const shouldTeach = taughtAddCount < 2;
+    const nextMode: AddFeedbackMode = shouldTeach ? "teach" : "pulse";
+    const timeoutMs = shouldTeach ? 230 : 150;
+
+    const existingTimeout = addFeedbackTimeoutsRef.current[itemId];
+    if (existingTimeout) {
+      clearTimeout(existingTimeout);
+    }
+
+    setAddFeedbackMap((prev) => ({
+      ...prev,
+      [itemId]: nextMode,
+    }));
+
+    addFeedbackTimeoutsRef.current[itemId] = setTimeout(() => {
+      setAddFeedbackMap((prev) => ({
+        ...prev,
+        [itemId]: "idle",
+      }));
+      delete addFeedbackTimeoutsRef.current[itemId];
+    }, timeoutMs);
+
+    if (shouldTeach) {
+      setTaughtAddCount((prev) => prev + 1);
+    }
+  };
+
   const addToCart = (item: MenuItem) => {
     const hasPrice = typeof item.price === "number" && item.price >= 0;
 
@@ -388,6 +462,8 @@ function MenuContent() {
         },
       ];
     });
+
+    triggerAddFeedback(item.id);
   };
 
   const updateCartQuantity = (itemId: string, nextQuantity: number) => {
@@ -698,6 +774,17 @@ function MenuContent() {
                     const inCart = getCartQuantityForItem(item.id);
                     const priceAvailable =
                       typeof item.price === "number" && item.price >= 0;
+                    const addFeedback = addFeedbackMap[item.id] ?? "idle";
+
+                    const baseButtonClass =
+                      "shrink-0 rounded-full border px-4 py-2.5 text-sm font-medium transition-all duration-150 ease-out active:scale-[0.96]";
+
+                    const enabledButtonClass =
+                      addFeedback === "teach"
+                        ? "border-emerald-300/30 bg-emerald-400/14 text-emerald-100 shadow-[0_0_0_1px_rgba(52,211,153,0.12),0_0_18px_rgba(16,185,129,0.10)] scale-[1.02]"
+                        : addFeedback === "pulse"
+                        ? "border-[#8B5CFF]/34 bg-[#8B5CFF]/28 text-[#F3EDFF] shadow-[0_0_0_1px_rgba(139,92,255,0.10),0_0_16px_rgba(139,92,255,0.12)] scale-[1.02]"
+                        : "border-[#8B5CFF]/30 bg-[#8B5CFF]/24 text-[#E9E0FF] shadow-[0_0_0_1px_rgba(139,92,255,0.06)] hover:bg-[#8B5CFF]/34";
 
                     return (
                       <div
@@ -744,17 +831,22 @@ function MenuContent() {
                           <button
                             onClick={() => addToCart(item)}
                             disabled={isOut || !priceAvailable}
-                            className={`shrink-0 rounded-full border px-4 py-2.5 text-sm font-medium transition ${
+                            aria-live="polite"
+                            className={`${baseButtonClass} ${
                               isOut || !priceAvailable
                                 ? "cursor-not-allowed border-white/10 bg-white/10 text-white/35"
-                                : "border-[#8B5CFF]/30 bg-[#8B5CFF]/24 text-[#E9E0FF] shadow-[0_0_0_1px_rgba(139,92,255,0.06)] hover:bg-[#8B5CFF]/34"
+                                : enabledButtonClass
                             }`}
                           >
-                            {isOut
-                              ? "Out"
-                              : !priceAvailable
-                              ? "Unavailable"
-                              : "Add"}
+                            <span className="inline-flex min-w-[4.9rem] items-center justify-center gap-1.5 whitespace-nowrap">
+                              {isOut
+                                ? "Out"
+                                : !priceAvailable
+                                ? "Unavailable"
+                                : addFeedback === "teach"
+                                ? "✓ Added"
+                                : "+ Add"}
+                            </span>
                           </button>
                         </div>
                       </div>
