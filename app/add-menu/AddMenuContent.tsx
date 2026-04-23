@@ -42,7 +42,6 @@ export default function AddMenuContent() {
   const [deleteDontShowAgain, setDeleteDontShowAgain] = useState(false);
   const [deletingItemId, setDeletingItemId] = useState<string | null>(null);
 
-  // Back to top
   const [showBackToTop, setShowBackToTop] = useState(false);
   const [isScrolling, setIsScrolling] = useState(false);
 
@@ -369,7 +368,6 @@ export default function AddMenuContent() {
 
         <div className="mx-auto w-full max-w-6xl px-4 py-4">
           <div className="mx-auto w-full max-w-3xl space-y-4">
-            {/* Add Item */}
             <section className="rounded-3xl border border-white/8 bg-[#191C24] p-5">
               <p className="text-[10px] uppercase tracking-[0.18em] text-[#8B5CFF]">
                 Menu Control
@@ -422,7 +420,7 @@ export default function AddMenuContent() {
                           setItemName(item.name);
                           setShowSuggestions(false);
                         }}
-                        className="rounded-full border border-white/10 px-3 py-1 hover:bg-white/5"
+                        className="rounded-full border border-white/10 px-3 py-1 transition-all duration-150 hover:bg-white/5"
                       >
                         {item.name}
                       </button>
@@ -434,13 +432,12 @@ export default function AddMenuContent() {
               <button
                 onClick={addItem}
                 disabled={loading}
-                className="mt-4 rounded-full bg-white px-5 py-3 text-sm font-medium text-black hover:bg-gray-200 disabled:opacity-50"
+                className="mt-4 rounded-full bg-white px-5 py-3 text-sm font-medium text-black transition-all duration-150 hover:bg-gray-200 disabled:opacity-50"
               >
                 {loading ? "Saving..." : "Add Item"}
               </button>
             </section>
 
-            {/* Inventory */}
             <section className="rounded-3xl border border-white/8 bg-[#191C24] p-5">
               <div className="flex items-center justify-between gap-3">
                 <div>
@@ -482,14 +479,14 @@ export default function AddMenuContent() {
                         <div className="flex flex-wrap gap-2">
                           <button
                             onClick={() => updateQty(item.id, -1)}
-                            className="rounded-full border border-white/10 px-3 py-2 text-sm"
+                            className="rounded-full border border-white/10 px-4 py-2 text-sm text-white/90 transition-all duration-150 hover:border-[#508CFF]/45 hover:bg-[#508CFF]/10 hover:text-white"
                           >
                             -1
                           </button>
 
                           <button
                             onClick={() => updateQty(item.id, 1)}
-                            className="rounded-full border border-white/10 px-3 py-2 text-sm"
+                            className="rounded-full border border-white/10 px-4 py-2 text-sm text-white/90 transition-all duration-150 hover:border-[#508CFF]/45 hover:bg-[#508CFF]/10 hover:text-white"
                           >
                             +1
                           </button>
@@ -501,21 +498,19 @@ export default function AddMenuContent() {
                                 onChange={(e) =>
                                   setEditingPriceValue(e.target.value)
                                 }
-                                inputMode="decimal"
                                 className="w-24 rounded-full border border-white/10 bg-[#0D1118] px-3 py-2 text-sm outline-none"
                               />
 
                               <button
                                 onClick={() => savePrice(item.id)}
-                                disabled={savingPriceId === item.id}
-                                className="rounded-full bg-white px-4 py-2 text-sm text-black"
+                                className="rounded-full bg-white px-4 py-2 text-sm text-black transition-all duration-150 hover:bg-gray-200"
                               >
                                 Save
                               </button>
 
                               <button
                                 onClick={cancelPriceEdit}
-                                className="rounded-full border border-white/10 px-4 py-2 text-sm"
+                                className="rounded-full border border-white/10 px-4 py-2 text-sm transition-all duration-150 hover:bg-white/5"
                               >
                                 Cancel
                               </button>
@@ -523,15 +518,15 @@ export default function AddMenuContent() {
                           ) : (
                             <button
                               onClick={() => startPriceEdit(item)}
-                              className="rounded-full border border-white/10 px-4 py-2 text-sm"
+                              className="rounded-full border border-white/10 px-4 py-2 text-sm text-white/90 transition-all duration-150 hover:border-[#508CFF]/45 hover:bg-[#508CFF]/10 hover:text-white"
                             >
-                              Price
+                              Edit Price
                             </button>
                           )}
 
                           <button
                             onClick={() => handleDeletePress(item)}
-                            className="rounded-full bg-red-500/15 px-4 py-2 text-sm text-red-300"
+                            className="rounded-full bg-red-500/15 px-4 py-2 text-sm text-red-300 transition-all duration-150 hover:bg-red-500/28 hover:text-red-200"
                           >
                             Delete
                           </button>
@@ -606,7 +601,7 @@ export default function AddMenuContent() {
                 <button
                   onClick={closeDeleteModal}
                   disabled={deletingItemId === deleteTarget.id}
-                  className="rounded-full border border-white/10 px-4 py-3 text-sm"
+                  className="rounded-full border border-white/10 px-4 py-3 text-sm transition-all duration-150 hover:bg-white/5"
                 >
                   Cancel
                 </button>
@@ -617,7 +612,7 @@ export default function AddMenuContent() {
                     deletingItemId === deleteTarget.id ||
                     !deleteNameMatches
                   }
-                  className="rounded-full bg-red-500 px-4 py-3 text-sm font-medium text-white disabled:opacity-40"
+                  className="rounded-full bg-red-500 px-4 py-3 text-sm font-medium text-white transition-all duration-150 hover:bg-red-400 disabled:opacity-40"
                 >
                   {deletingItemId === deleteTarget.id
                     ? "Deleting..."
