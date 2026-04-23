@@ -4,6 +4,12 @@ export type Status =
   | "ready"
   | "completed";
 
+export type FirestoreTimestampLike = {
+  seconds?: number;
+  nanoseconds?: number;
+  toMillis?: () => number;
+} | null;
+
 export type Request = {
   id: string;
   guestName: string;
@@ -12,7 +18,11 @@ export type Request = {
   status: Status;
   orderNumber?: number;
   orderGroupId?: string;
-  createdAt?: any;
+  createdAt?: FirestoreTimestampLike;
+  pendingAt?: FirestoreTimestampLike;
+  preparingAt?: FirestoreTimestampLike;
+  readyAt?: FirestoreTimestampLike;
+  completedAt?: FirestoreTimestampLike;
 };
 
 export type GroupedRequestCard = {
@@ -23,7 +33,7 @@ export type GroupedRequestCard = {
   orderCount: number;
   requestIds: string[];
   requests: Request[];
-  latestCreatedAt?: any;
+  latestCreatedAt?: FirestoreTimestampLike;
 };
 
 export type ReadyGuestCard = {
@@ -34,5 +44,5 @@ export type ReadyGuestCard = {
   orderCount: number;
   requestIds: string[];
   requests: Request[];
-  latestCreatedAt?: any;
+  latestCreatedAt?: FirestoreTimestampLike;
 };

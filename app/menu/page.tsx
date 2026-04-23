@@ -24,6 +24,12 @@ type MenuItem = {
 
 type RequestStatus = "pending" | "preparing" | "ready" | "completed";
 
+type FirestoreTimestampLike = {
+  seconds?: number;
+  nanoseconds?: number;
+  toMillis?: () => number;
+} | null;
+
 type RequestItem = {
   id: string;
   itemName: string;
@@ -32,7 +38,11 @@ type RequestItem = {
   guestId: string;
   orderNumber?: number;
   orderGroupId?: string;
-  createdAt?: any;
+  createdAt?: FirestoreTimestampLike;
+  pendingAt?: FirestoreTimestampLike;
+  preparingAt?: FirestoreTimestampLike;
+  readyAt?: FirestoreTimestampLike;
+  completedAt?: FirestoreTimestampLike;
 };
 
 type CartItem = {
@@ -42,7 +52,49 @@ type CartItem = {
   price: number;
 };
 
-function getStatusBadgeClass(status: RequestItem["status"]) {
+function timestampToMillis(value?: FirestoreTimestampLike) {
+  if (!value) return 0;
+
+  if (typeof value.toMillis === "function") {
+    return value.toMillis();
+  }
+
+  if (typeof value.seconds === "number") {
+    const nanos =
+      typeof value.nanoseconds === "number" ? value.nanoseconds : 0;
+    return value.seconds * 1000 + Math.floor(nanos / 1_000_000);
+  }
+
+  return 0;
+}
+
+function getEffectiveRequestStatus(request: RequestItem): RequestStatus {
+  const completedMs = timestampToMillis(request.completedAt);
+  if (completedMs > 0) return "completed";
+
+  const readyMs = timestampToMillis(request.readyAt);
+  if (readyMs > 0) return "ready";
+
+  const preparingMs = timestampToMillis(request.preparingAt);
+  if (preparingMs > 0) return "preparing";
+
+  const pendingMs = timestampToMillis(request.pendingAt);
+  if (pendingMs > 0) return "pending";
+
+  return request.status ?? "pending";
+}
+
+function getLifecycleSortTime(request: RequestItem) {
+  const completedMs = timestampToMillis(request.completedAt);
+  const readyMs = timestampToMillis(request.readyAt);
+  const preparingMs = timestampToMillis(request.preparingAt);
+  const pendingMs = timestampToMillis(request.pendingAt);
+  const createdMs = timestampToMillis(request.createdAt);
+
+  return completedMs || readyMs || preparingMs || pendingMs || createdMs || 0;
+}
+
+function getStatusBadgeClass(status: RequestStatus) {
   switch (status) {
     case "pending":
       return "border border-yellow-400/20 bg-yellow-500/10 text-yellow-300";
@@ -57,7 +109,7 @@ function getStatusBadgeClass(status: RequestItem["status"]) {
   }
 }
 
-function getStatusLabel(status: RequestItem["status"]) {
+function getStatusLabel(status: RequestStatus) {
   switch (status) {
     case "pending":
       return "Pending";
@@ -72,10 +124,7 @@ function getStatusLabel(status: RequestItem["status"]) {
   }
 }
 
-function getStatusNote(
-  status: RequestItem["status"],
-  orderNumber?: number
-) {
+function getStatusNote(status: RequestStatus, orderNumber?: number) {
   const orderText =
     typeof orderNumber === "number" ? ` order #${orderNumber}` : " your order";
 
@@ -93,7 +142,7 @@ function getStatusNote(
   }
 }
 
-function getStatusAccentClass(status: RequestItem["status"]) {
+function getStatusAccentClass(status: RequestStatus) {
   switch (status) {
     case "pending":
       return "bg-yellow-400/80";
@@ -108,7 +157,7 @@ function getStatusAccentClass(status: RequestItem["status"]) {
   }
 }
 
-function getStatusPriority(status: RequestItem["status"]) {
+function getStatusPriority(status: RequestStatus) {
   switch (status) {
     case "ready":
       return 0;
@@ -143,7 +192,7 @@ function MenuContent() {
   );
   const [activityJumpHighlight, setActivityJumpHighlight] = useState(false);
 
-  const previousStatusMapRef = useRef<Record<string, RequestItem["status"]>>({});
+  const previousStatusMapRef = useRef<Record<string, RequestStatus>>({});
   const initialSnapshotLoadedRef = useRef(false);
   const activitySectionRef = useRef<HTMLElement | null>(null);
 
@@ -203,10 +252,10 @@ function MenuContent() {
         });
 
         if (!initialSnapshotLoadedRef.current) {
-          const initialStatusMap: Record<string, RequestItem["status"]> = {};
+          const initialStatusMap: Record<string, RequestStatus> = {};
 
           list.forEach((req) => {
-            initialStatusMap[req.id] = req.status;
+            initialStatusMap[req.id] = getEffectiveRequestStatus(req);
           });
 
           previousStatusMapRef.current = initialStatusMap;
@@ -215,10 +264,11 @@ function MenuContent() {
           return;
         }
 
-        const nextStatusMap: Record<string, RequestItem["status"]> = {};
+        const nextStatusMap: Record<string, RequestStatus> = {};
 
         list.forEach((req) => {
-          nextStatusMap[req.id] = req.status;
+          const effectiveStatus = getEffectiveRequestStatus(req);
+          nextStatusMap[req.id] = effectiveStatus;
 
           const previousStatus = previousStatusMapRef.current[req.id];
 
@@ -229,7 +279,7 @@ function MenuContent() {
             return;
           }
 
-          if (previousStatus !== req.status) {
+          if (previousStatus !== effectiveStatus) {
             setHighlightedStatusId(req.id);
           }
         });
@@ -423,6 +473,10 @@ function MenuContent() {
             orderNumber,
             orderGroupId,
             createdAt: serverTimestamp(),
+            pendingAt: serverTimestamp(),
+            preparingAt: null,
+            readyAt: null,
+            completedAt: null,
           });
         });
 
@@ -446,31 +500,36 @@ function MenuContent() {
   };
 
   const visibleRequests = useMemo(() => {
-    return requests.filter((req) => req.status !== "completed");
+    return requests.filter(
+      (req) => getEffectiveRequestStatus(req) !== "completed"
+    );
   }, [requests]);
 
   const sortedRequests = useMemo(() => {
     return [...visibleRequests].sort((a, b) => {
-      const priorityDiff =
-        getStatusPriority(a.status) - getStatusPriority(b.status);
+      const aStatus = getEffectiveRequestStatus(a);
+      const bStatus = getEffectiveRequestStatus(b);
+
+      const priorityDiff = getStatusPriority(aStatus) - getStatusPriority(bStatus);
 
       if (priorityDiff !== 0) return priorityDiff;
 
-      const aTime = a.createdAt?.seconds ?? 0;
-      const bTime = b.createdAt?.seconds ?? 0;
-      return bTime - aTime;
+      return getLifecycleSortTime(b) - getLifecycleSortTime(a);
     });
   }, [visibleRequests]);
 
   const readyCount = useMemo(() => {
-    return sortedRequests.filter((req) => req.status === "ready").length;
-  }, [sortedRequests]);
+    return requests.filter(
+      (req) => getEffectiveRequestStatus(req) === "ready"
+    ).length;
+  }, [requests]);
 
   const activeCount = useMemo(() => {
-    return sortedRequests.filter(
-      (req) => req.status === "pending" || req.status === "preparing"
-    ).length;
-  }, [sortedRequests]);
+    return requests.filter((req) => {
+      const status = getEffectiveRequestStatus(req);
+      return status === "pending" || status === "preparing";
+    }).length;
+  }, [requests]);
 
   const cartItemCount = useMemo(() => {
     return cart.reduce((sum, item) => sum + item.quantity, 0);
@@ -749,7 +808,8 @@ function MenuContent() {
               ) : (
                 <div className="space-y-3">
                   {sortedRequests.map((req) => {
-                    const isReady = req.status === "ready";
+                    const effectiveStatus = getEffectiveRequestStatus(req);
+                    const isReady = effectiveStatus === "ready";
                     const isRecent = recentRequestIds.includes(req.id);
                     const isStatusHighlighted = highlightedStatusId === req.id;
 
@@ -767,7 +827,7 @@ function MenuContent() {
                         <div className="flex items-start gap-3">
                           <div
                             className={`mt-1 h-2.5 w-2.5 shrink-0 rounded-full ${getStatusAccentClass(
-                              req.status
+                              effectiveStatus
                             )}`}
                           />
 
@@ -799,10 +859,10 @@ function MenuContent() {
 
                               <span
                                 className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-medium ${getStatusBadgeClass(
-                                  req.status
+                                  effectiveStatus
                                 )}`}
                               >
-                                {getStatusLabel(req.status)}
+                                {getStatusLabel(effectiveStatus)}
                               </span>
                             </div>
 
@@ -811,7 +871,7 @@ function MenuContent() {
                                 isReady ? "text-emerald-200/90" : "text-white/48"
                               }`}
                             >
-                              {getStatusNote(req.status, req.orderNumber)}
+                              {getStatusNote(effectiveStatus, req.orderNumber)}
                             </p>
                           </div>
                         </div>
