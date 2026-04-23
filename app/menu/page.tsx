@@ -197,6 +197,7 @@ function MenuContent() {
     Record<string, AddFeedbackMode>
   >({});
   const [taughtAddCount, setTaughtAddCount] = useState(0);
+  const [cartPulse, setCartPulse] = useState(false);
 
   const previousStatusMapRef = useRef<Record<string, RequestStatus>>({});
   const initialSnapshotLoadedRef = useRef(false);
@@ -221,12 +222,22 @@ function MenuContent() {
   }, [eventId, router]);
 
   useEffect(() => {
-    return () => {
-      Object.values(addFeedbackTimeoutsRef.current).forEach((timeoutId) => {
-        clearTimeout(timeoutId);
-      });
-    };
-  }, []);
+  return () => {
+    Object.values(addFeedbackTimeoutsRef.current).forEach((timeoutId) => {
+      clearTimeout(timeoutId);
+    });
+  };
+}, []);
+
+useEffect(() => {
+  if (!cartPulse) return;
+
+  const timeout = setTimeout(() => {
+    setCartPulse(false);
+  }, 170);
+
+  return () => clearTimeout(timeout);
+}, [cartPulse]);
 
   useEffect(() => {
     if (!session) return;
@@ -417,8 +428,10 @@ function MenuContent() {
     }, timeoutMs);
 
     if (shouldTeach) {
-      setTaughtAddCount((prev) => prev + 1);
-    }
+  setTaughtAddCount((prev) => prev + 1);
+}
+
+setCartPulse(true);
   };
 
   const addToCart = (item: MenuItem) => {
@@ -980,14 +993,18 @@ function MenuContent() {
           <div className="fixed bottom-5 left-1/2 z-40 w-[calc(100%-32px)] max-w-md -translate-x-1/2">
             <button
               onClick={() => setCartOpen(true)}
-              className="flex w-full items-center justify-between gap-3 rounded-2xl border border-[#8B5CFF]/25 bg-[#25153D]/95 px-4 py-4 text-left text-white shadow-2xl backdrop-blur transition hover:bg-[#2B1844]/95"
+className={`flex w-full items-center justify-between gap-3 rounded-2xl border bg-[#25153D]/95 px-4 py-4 text-left text-white backdrop-blur transition-all duration-150 hover:bg-[#2B1844]/95 ${
+  cartPulse
+    ? "border-[#B8A6FF]/45 shadow-[0_0_0_1px_rgba(184,166,255,0.14),0_12px_34px_rgba(139,92,255,0.22)]"
+    : "border-[#8B5CFF]/25 shadow-2xl"
+}`}
             >
               <div className="min-w-0">
                 <p className="text-[10px] uppercase tracking-[0.16em] text-[#D7C7FF]">
                   Your Cart
                 </p>
                 <p className="mt-1 text-sm font-semibold text-white">
-                  {cartItemCount} item{cartItemCount === 1 ? "" : "s"} ready
+                  {cartItemCount} item{cartItemCount === 1 ? "" : "s"} in cart
                 </p>
               </div>
 

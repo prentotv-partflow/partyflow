@@ -8,9 +8,11 @@ import { STORAGE_KEYS } from "../lib/storageKeys";
 import type { MenuItem } from "../types/menu";
 import {
   collection,
+  addDoc,
   onSnapshot,
   query,
   serverTimestamp,
+  updateDoc,
   deleteDoc,
   doc,
   runTransaction,
@@ -40,6 +42,12 @@ export default function AddMenuContent() {
   const [deleteDontShowAgain, setDeleteDontShowAgain] = useState(false);
   const [deletingItemId, setDeletingItemId] = useState<string | null>(null);
 
+  // Back to top
+  const [showBackToTop, setShowBackToTop] = useState(false);
+  const [isScrolling, setIsScrolling] = useState(false);
+
+  const scrollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const nameInputRef = useRef<HTMLInputElement>(null);
   const qtyInputRef = useRef<HTMLInputElement>(null);
   const priceInputRef = useRef<HTMLInputElement>(null);
@@ -51,6 +59,7 @@ export default function AddMenuContent() {
     const stored = localStorage.getItem(
       STORAGE_KEYS.skipMenuDeleteConfirmation
     );
+
     setSkipDeleteConfirmation(stored === "true");
   }, []);
 
@@ -63,6 +72,33 @@ export default function AddMenuContent() {
 
     return () => clearTimeout(timeout);
   }, [deleteTarget]);
+
+  useEffect(() => {
+    const handleScroll = () => {
+      const triggerPoint = window.innerHeight;
+
+      setShowBackToTop(window.scrollY > triggerPoint);
+      setIsScrolling(true);
+
+      if (scrollTimeoutRef.current) {
+        clearTimeout(scrollTimeoutRef.current);
+      }
+
+      scrollTimeoutRef.current = setTimeout(() => {
+        setIsScrolling(false);
+      }, 140);
+    };
+
+    window.addEventListener("scroll", handleScroll, { passive: true });
+
+    return () => {
+      window.removeEventListener("scroll", handleScroll);
+
+      if (scrollTimeoutRef.current) {
+        clearTimeout(scrollTimeoutRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (!eventId) return;
@@ -94,6 +130,13 @@ export default function AddMenuContent() {
     }
 
     router.push(`/add-menu?event=${eventId}`);
+  };
+
+  const handleBackToTop = () => {
+    window.scrollTo({
+      top: 0,
+      behavior: "smooth",
+    });
   };
 
   const addItem = async () => {
@@ -139,15 +182,11 @@ export default function AddMenuContent() {
           });
         });
       } else {
-        const ref = doc(menuRef);
-
-        await runTransaction(db, async (transaction) => {
-          transaction.set(ref, {
-            name: itemName.trim(),
-            qty: qtyNumber,
-            price: priceNumber,
-            createdAt: serverTimestamp(),
-          });
+        await addDoc(menuRef, {
+          name: itemName.trim(),
+          qty: qtyNumber,
+          price: priceNumber,
+          createdAt: serverTimestamp(),
         });
       }
 
@@ -164,67 +203,6 @@ export default function AddMenuContent() {
     }
   };
 
-  const closeDeleteModal = () => {
-    if (deletingItemId) return;
-
-    setDeleteTarget(null);
-    setDeleteConfirmInput("");
-    setDeleteDontShowAgain(false);
-  };
-
-  const performDelete = async (item: MenuItem) => {
-    if (!eventId) return;
-
-    try {
-      setDeletingItemId(item.id);
-      await deleteDoc(doc(db, "events", eventId, "menu", item.id));
-
-      if (deleteDontShowAgain) {
-        localStorage.setItem(STORAGE_KEYS.skipMenuDeleteConfirmation, "true");
-        setSkipDeleteConfirmation(true);
-      }
-
-      closeDeleteModal();
-    } catch (error) {
-      console.error(error);
-      alert("Failed to delete item");
-    } finally {
-      setDeletingItemId(null);
-    }
-  };
-
-  const handleDeletePress = async (item: MenuItem) => {
-    if (!eventId) return;
-
-    if (skipDeleteConfirmation) {
-      try {
-        setDeletingItemId(item.id);
-        await deleteDoc(doc(db, "events", eventId, "menu", item.id));
-      } catch (error) {
-        console.error(error);
-        alert("Failed to delete item");
-      } finally {
-        setDeletingItemId(null);
-      }
-      return;
-    }
-
-    setDeleteTarget(item);
-    setDeleteConfirmInput("");
-    setDeleteDontShowAgain(false);
-  };
-
-  const handleConfirmDelete = async () => {
-    if (!deleteTarget) return;
-
-    if (deleteConfirmInput !== deleteTarget.name) {
-      alert("Typed name must match exactly");
-      return;
-    }
-
-    await performDelete(deleteTarget);
-  };
-
   const updateQty = async (id: string, delta: number) => {
     if (!eventId) return;
 
@@ -233,11 +211,11 @@ export default function AddMenuContent() {
     await runTransaction(db, async (transaction) => {
       const snap = await transaction.get(ref);
       const currentQty = snap.data()?.qty || 0;
+      const nextQty = currentQty + delta;
 
-      const newQty = currentQty + delta;
-      if (newQty < 0) return;
+      if (nextQty < 0) return;
 
-      transaction.update(ref, { qty: newQty });
+      transaction.update(ref, { qty: nextQty });
     });
   };
 
@@ -271,18 +249,8 @@ export default function AddMenuContent() {
     try {
       setSavingPriceId(itemId);
 
-      const ref = doc(db, "events", eventId, "menu", itemId);
-
-      await runTransaction(db, async (transaction) => {
-        const snap = await transaction.get(ref);
-
-        if (!snap.exists()) {
-          throw new Error("Item no longer exists");
-        }
-
-        transaction.update(ref, {
-          price: nextPrice,
-        });
+      await updateDoc(doc(db, "events", eventId, "menu", itemId), {
+        price: nextPrice,
       });
 
       cancelPriceEdit();
@@ -292,6 +260,73 @@ export default function AddMenuContent() {
     } finally {
       setSavingPriceId(null);
     }
+  };
+
+  const closeDeleteModal = () => {
+    if (deletingItemId) return;
+
+    setDeleteTarget(null);
+    setDeleteConfirmInput("");
+    setDeleteDontShowAgain(false);
+  };
+
+  const performDelete = async (item: MenuItem) => {
+    if (!eventId) return;
+
+    try {
+      setDeletingItemId(item.id);
+
+      await deleteDoc(doc(db, "events", eventId, "menu", item.id));
+
+      if (deleteDontShowAgain) {
+        localStorage.setItem(
+          STORAGE_KEYS.skipMenuDeleteConfirmation,
+          "true"
+        );
+        setSkipDeleteConfirmation(true);
+      }
+
+      closeDeleteModal();
+    } catch (error) {
+      console.error(error);
+      alert("Failed to delete item");
+    } finally {
+      setDeletingItemId(null);
+    }
+  };
+
+  const handleDeletePress = async (item: MenuItem) => {
+    if (!eventId) return;
+
+    if (skipDeleteConfirmation) {
+      try {
+        setDeletingItemId(item.id);
+
+        await deleteDoc(doc(db, "events", eventId, "menu", item.id));
+      } catch (error) {
+        console.error(error);
+        alert("Failed to delete item");
+      } finally {
+        setDeletingItemId(null);
+      }
+
+      return;
+    }
+
+    setDeleteTarget(item);
+    setDeleteConfirmInput("");
+    setDeleteDontShowAgain(false);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!deleteTarget) return;
+
+    if (deleteConfirmInput !== deleteTarget.name) {
+      alert("Typed name must match exactly");
+      return;
+    }
+
+    await performDelete(deleteTarget);
   };
 
   const suggestions = menu.filter((item) =>
@@ -308,14 +343,12 @@ export default function AddMenuContent() {
 
   if (!eventId) {
     return (
-      <div className="min-h-screen bg-[#0A0C12] text-white">
-        <div className="mx-auto flex min-h-screen w-full max-w-6xl items-center justify-center px-4">
-          <div className="rounded-3xl border border-white/10 bg-[#191C24] px-6 py-8 text-center">
-            <p className="text-lg font-semibold">Missing event context</p>
-            <p className="mt-2 text-sm text-white/55">
-              Menu management needs a valid event to load.
-            </p>
-          </div>
+      <div className="min-h-screen bg-[#0A0C12] text-white flex items-center justify-center px-4">
+        <div className="rounded-3xl border border-white/10 bg-[#191C24] px-6 py-8 text-center">
+          <p className="text-lg font-semibold">Missing event context</p>
+          <p className="mt-2 text-sm text-white/55">
+            Menu management needs a valid event to load.
+          </p>
         </div>
       </div>
     );
@@ -336,223 +369,195 @@ export default function AddMenuContent() {
 
         <div className="mx-auto w-full max-w-6xl px-4 py-4">
           <div className="mx-auto w-full max-w-3xl space-y-4">
-            <div className="rounded-3xl border border-white/10 bg-[#141821] px-5 py-5">
-              <p className="text-[10px] uppercase tracking-[0.18em] text-[#8FB3FF]">
-                Menu Management
+            {/* Add Item */}
+            <section className="rounded-3xl border border-white/8 bg-[#191C24] p-5">
+              <p className="text-[10px] uppercase tracking-[0.18em] text-[#8B5CFF]">
+                Menu Control
               </p>
-              <h1 className="mt-1 text-2xl font-semibold">Add Menu Items</h1>
-              <p className="mt-2 text-sm leading-6 text-white/55">
-                Add new items, merge quantities for existing items, update
-                pricing, and keep stock synced in real time.
-              </p>
-            </div>
 
-            <div className="rounded-3xl border border-white/10 bg-[#191C24] p-4 sm:p-5">
-              <div className="mb-4">
-                <h2 className="text-lg font-semibold">Add or Restock Items</h2>
-                <p className="mt-1 text-sm text-white/55">
-                  Existing item names will merge, increase quantity, and update
-                  the active price.
-                </p>
-              </div>
+              <h1 className="mt-2 text-2xl font-semibold">Add / Restock</h1>
 
-              <div className="space-y-3">
+              <div className="mt-5 grid gap-3 sm:grid-cols-3">
                 <input
                   ref={nameInputRef}
-                  type="text"
-                  placeholder="Item Name"
-                  className="w-full rounded-2xl border border-white/10 bg-[#0F1218] px-4 py-3 text-sm text-white outline-none transition placeholder:text-white/30 focus:border-[#508CFF]/60"
                   value={itemName}
                   onChange={(e) => {
                     setItemName(e.target.value);
                     setShowSuggestions(true);
                   }}
+                  placeholder="Item name"
+                  className="rounded-2xl border border-white/10 bg-[#0D1118] px-4 py-3 outline-none"
                 />
 
-                {showSuggestions &&
-                  itemName &&
-                  suggestions.length > 0 &&
-                  !exactMatch && (
-                    <div className="overflow-hidden rounded-2xl border border-white/10 bg-[#0F1218]">
-                      {suggestions.map((s) => (
-                        <button
-                          key={s.id}
-                          type="button"
-                          className="block w-full px-4 py-2.5 text-left text-sm text-white transition hover:bg-white/5"
-                          onClick={() => {
-                            setItemName(s.name);
-                            setShowSuggestions(false);
-                            qtyInputRef.current?.focus();
-                          }}
-                        >
-                          {s.name}
-                        </button>
-                      ))}
-                    </div>
-                  )}
+                <input
+                  ref={qtyInputRef}
+                  value={quantity}
+                  onChange={(e) => setQuantity(e.target.value)}
+                  placeholder="Qty"
+                  inputMode="numeric"
+                  className="rounded-2xl border border-white/10 bg-[#0D1118] px-4 py-3 outline-none"
+                />
 
-                <div className="grid grid-cols-2 gap-3">
-                  <input
-                    ref={qtyInputRef}
-                    type="number"
-                    placeholder="Qty"
-                    className="w-full rounded-2xl border border-white/10 bg-[#0F1218] px-4 py-3 text-sm text-white outline-none transition placeholder:text-white/30 focus:border-[#508CFF]/60"
-                    value={quantity}
-                    onChange={(e) => setQuantity(e.target.value)}
-                  />
-
-                  <input
-                    ref={priceInputRef}
-                    type="number"
-                    min="0"
-                    step="1"
-                    placeholder="Price"
-                    className="w-full rounded-2xl border border-white/10 bg-[#0F1218] px-4 py-3 text-sm text-white outline-none transition placeholder:text-white/30 focus:border-[#508CFF]/60"
-                    value={price}
-                    onChange={(e) => setPrice(e.target.value)}
-                  />
-                </div>
-
-                <button
-                  onClick={addItem}
-                  disabled={loading}
-                  className="w-full rounded-full bg-white px-4 py-3 text-sm font-medium text-black transition hover:bg-gray-200 disabled:cursor-not-allowed disabled:bg-white/20 disabled:text-white/40"
-                >
-                  {loading ? "Adding..." : "Add Item"}
-                </button>
+                <input
+                  ref={priceInputRef}
+                  value={price}
+                  onChange={(e) => setPrice(e.target.value)}
+                  placeholder="Price"
+                  inputMode="decimal"
+                  className="rounded-2xl border border-white/10 bg-[#0D1118] px-4 py-3 outline-none"
+                />
               </div>
-            </div>
 
-            <div className="rounded-3xl border border-white/10 bg-[#191C24] p-4 sm:p-5">
-              <div className="mb-3 flex items-start justify-between gap-3">
+              {itemName &&
+              showSuggestions &&
+              suggestions.length > 0 &&
+              !exactMatch ? (
+                <div className="mt-3 rounded-2xl border border-white/8 bg-[#10141C] p-3 text-sm text-white/70">
+                  Similar items:
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {suggestions.slice(0, 6).map((item) => (
+                      <button
+                        key={item.id}
+                        onClick={() => {
+                          setItemName(item.name);
+                          setShowSuggestions(false);
+                        }}
+                        className="rounded-full border border-white/10 px-3 py-1 hover:bg-white/5"
+                      >
+                        {item.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+
+              <button
+                onClick={addItem}
+                disabled={loading}
+                className="mt-4 rounded-full bg-white px-5 py-3 text-sm font-medium text-black hover:bg-gray-200 disabled:opacity-50"
+              >
+                {loading ? "Saving..." : "Add Item"}
+              </button>
+            </section>
+
+            {/* Inventory */}
+            <section className="rounded-3xl border border-white/8 bg-[#191C24] p-5">
+              <div className="flex items-center justify-between gap-3">
                 <div>
-                  <p className="text-[10px] uppercase tracking-[0.18em] text-[#8FB3FF]">
-                    Current Menu
+                  <p className="text-[10px] uppercase tracking-[0.18em] text-[#8B5CFF]">
+                    Inventory
                   </p>
-                  <h2 className="mt-1 text-lg font-semibold">Live Inventory</h2>
+                  <h2 className="mt-2 text-xl font-semibold">
+                    Current Menu
+                  </h2>
                 </div>
 
-                <span className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-xs text-white/70">
+                <span className="rounded-full border border-white/10 px-3 py-1 text-xs text-white/65">
                   {menu.length}
                 </span>
               </div>
 
-              {menu.length === 0 ? (
-                <div className="rounded-2xl border border-white/5 bg-[#0F1218] px-4 py-8 text-center">
-                  <p className="text-sm text-white/45">No menu items yet</p>
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  {menu.map((item) => {
-                    const isEditingPrice = editingPriceId === item.id;
-                    const isSavingPrice = savingPriceId === item.id;
-                    const isDeleting = deletingItemId === item.id;
+              <div className="mt-4 space-y-3">
+                {menu.length === 0 ? (
+                  <div className="rounded-2xl border border-white/8 bg-[#10141C] px-4 py-8 text-center text-white/50">
+                    No items yet.
+                  </div>
+                ) : (
+                  menu.map((item) => (
+                    <div
+                      key={item.id}
+                      className="rounded-2xl border border-white/8 bg-[#10141C] p-4"
+                    >
+                      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                        <div>
+                          <p className="font-semibold">{item.name}</p>
+                          <p className="mt-1 text-sm text-white/55">
+                            Qty: {item.qty} •{" "}
+                            {typeof item.price === "number"
+                              ? formatCurrency(item.price)
+                              : "No price"}
+                          </p>
+                        </div>
 
-                    return (
-                      <div
-                        key={item.id}
-                        className="rounded-2xl border border-white/6 bg-[#0F1218] p-3"
-                      >
-                        <div className="flex flex-col gap-3">
-                          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                            <div className="min-w-0">
-                              <p className="truncate text-sm font-semibold text-white">
-                                {item.name}
-                              </p>
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            onClick={() => updateQty(item.id, -1)}
+                            className="rounded-full border border-white/10 px-3 py-2 text-sm"
+                          >
+                            -1
+                          </button>
 
-                              <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] text-white/45">
-                                <span>Stock: {item.qty}</span>
-                                <span className="text-white/20">•</span>
-                                <span>
-                                  {typeof item.price === "number"
-                                    ? formatCurrency(item.price)
-                                    : "Price not set"}
-                                </span>
-                              </div>
-                            </div>
+                          <button
+                            onClick={() => updateQty(item.id, 1)}
+                            className="rounded-full border border-white/10 px-3 py-2 text-sm"
+                          >
+                            +1
+                          </button>
 
-                            <div className="flex flex-wrap items-center gap-2 lg:justify-end">
-                              <div className="flex items-center gap-1 rounded-full border border-white/10 bg-white/5 px-1.5 py-1.5">
-                                <button
-                                  onClick={() => updateQty(item.id, -1)}
-                                  className="h-7 w-7 rounded-full bg-white/10 text-sm text-white transition hover:bg-white/15"
-                                >
-                                  -
-                                </button>
-
-                                <span className="min-w-[1.75rem] text-center text-xs font-medium text-white">
-                                  {item.qty}
-                                </span>
-
-                                <button
-                                  onClick={() => updateQty(item.id, 1)}
-                                  className="h-7 w-7 rounded-full bg-white/10 text-sm text-white transition hover:bg-white/15"
-                                >
-                                  +
-                                </button>
-                              </div>
+                          {editingPriceId === item.id ? (
+                            <>
+                              <input
+                                value={editingPriceValue}
+                                onChange={(e) =>
+                                  setEditingPriceValue(e.target.value)
+                                }
+                                inputMode="decimal"
+                                className="w-24 rounded-full border border-white/10 bg-[#0D1118] px-3 py-2 text-sm outline-none"
+                              />
 
                               <button
-                                onClick={() => startPriceEdit(item)}
-                                className="rounded-full border border-[#508CFF]/20 bg-[#508CFF]/10 px-3 py-2 text-xs font-medium text-[#9FC0FF] transition hover:bg-[#508CFF]/15"
+                                onClick={() => savePrice(item.id)}
+                                disabled={savingPriceId === item.id}
+                                className="rounded-full bg-white px-4 py-2 text-sm text-black"
                               >
-                                Edit Price
+                                Save
                               </button>
 
                               <button
-                                onClick={() => handleDeletePress(item)}
-                                disabled={isDeleting}
-                                className="rounded-full bg-red-500/10 px-3 py-2 text-xs font-medium text-red-300 transition hover:bg-red-500/15 disabled:cursor-not-allowed disabled:opacity-50"
+                                onClick={cancelPriceEdit}
+                                className="rounded-full border border-white/10 px-4 py-2 text-sm"
                               >
-                                {isDeleting ? "Deleting..." : "Delete"}
+                                Cancel
                               </button>
-                            </div>
-                          </div>
+                            </>
+                          ) : (
+                            <button
+                              onClick={() => startPriceEdit(item)}
+                              className="rounded-full border border-white/10 px-4 py-2 text-sm"
+                            >
+                              Price
+                            </button>
+                          )}
 
-                          {isEditingPrice ? (
-                            <div className="rounded-2xl border border-white/8 bg-white/5 p-3">
-                              <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
-                                <input
-                                  type="number"
-                                  min="0"
-                                  step="1"
-                                  placeholder="New price"
-                                  className="flex-1 rounded-2xl border border-white/10 bg-[#0B0F16] px-4 py-2.5 text-sm text-white outline-none transition placeholder:text-white/30 focus:border-[#508CFF]/60"
-                                  value={editingPriceValue}
-                                  onChange={(e) =>
-                                    setEditingPriceValue(e.target.value)
-                                  }
-                                />
-
-                                <div className="flex gap-2">
-                                  <button
-                                    onClick={cancelPriceEdit}
-                                    disabled={isSavingPrice}
-                                    className="rounded-full border border-white/10 bg-white/5 px-3 py-2.5 text-xs font-medium text-white/80 transition hover:bg-white/10"
-                                  >
-                                    Cancel
-                                  </button>
-
-                                  <button
-                                    onClick={() => savePrice(item.id)}
-                                    disabled={isSavingPrice}
-                                    className="rounded-full bg-white px-3 py-2.5 text-xs font-medium text-black transition hover:bg-gray-200"
-                                  >
-                                    {isSavingPrice ? "Saving..." : "Save"}
-                                  </button>
-                                </div>
-                              </div>
-                            </div>
-                          ) : null}
+                          <button
+                            onClick={() => handleDeletePress(item)}
+                            className="rounded-full bg-red-500/15 px-4 py-2 text-sm text-red-300"
+                          >
+                            Delete
+                          </button>
                         </div>
                       </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </section>
           </div>
         </div>
+
+        {showBackToTop ? (
+          <button
+            onClick={handleBackToTop}
+            aria-label="Back to top"
+            className={`fixed bottom-6 right-4 z-40 h-11 w-11 rounded-full border bg-[#141821]/92 text-white shadow-xl backdrop-blur transition-all duration-150 sm:right-6 ${
+              isScrolling
+                ? "border-white/10 opacity-60 scale-[0.98]"
+                : "border-[#508CFF]/25 opacity-100 hover:border-[#508CFF]/45 hover:scale-[1.03]"
+            } active:scale-[0.96]`}
+          >
+            ↑
+          </button>
+        ) : null}
       </div>
 
       {deleteTarget ? (
@@ -562,55 +567,46 @@ export default function AddMenuContent() {
               <p className="text-[10px] uppercase tracking-[0.18em] text-red-300">
                 Confirm Deletion
               </p>
-              <h2 className="mt-1 text-lg font-semibold">Delete Menu Item</h2>
-              <p className="mt-2 text-sm leading-6 text-white/55">
-                This action will permanently remove{" "}
-                <span className="font-medium text-white">
-                  {deleteTarget.name}
-                </span>{" "}
-                from the live inventory.
-              </p>
+              <h2 className="mt-1 text-lg font-semibold">
+                Delete Menu Item
+              </h2>
             </div>
 
             <div className="space-y-4 p-4">
-              <div className="rounded-2xl border border-red-400/15 bg-red-500/8 px-4 py-3">
-                <p className="text-xs font-medium uppercase tracking-[0.14em] text-red-200/80">
-                  Required confirmation
-                </p>
-                <p className="mt-2 text-sm text-white/75">
-                  Type the exact item name to confirm deletion:
-                </p>
-                <p className="mt-2 text-sm font-semibold text-white">
+              <p className="text-sm text-white/65">
+                Type{" "}
+                <span className="font-medium text-white">
                   {deleteTarget.name}
-                </p>
-              </div>
+                </span>{" "}
+                to confirm.
+              </p>
 
               <input
                 ref={deleteInputRef}
-                type="text"
-                placeholder="Enter exact item name"
-                className="w-full rounded-2xl border border-white/10 bg-[#0B0F16] px-4 py-3 text-sm text-white outline-none transition placeholder:text-white/30 focus:border-red-400/60"
                 value={deleteConfirmInput}
-                onChange={(e) => setDeleteConfirmInput(e.target.value)}
+                onChange={(e) =>
+                  setDeleteConfirmInput(e.target.value)
+                }
+                placeholder="Exact item name"
+                className="w-full rounded-2xl border border-white/10 bg-[#0D1118] px-4 py-3 outline-none"
               />
 
-              <label className="flex items-start gap-3 rounded-2xl border border-white/8 bg-white/5 px-4 py-3">
+              <label className="flex items-center gap-2 text-sm text-white/65">
                 <input
                   type="checkbox"
-                  className="mt-0.5 h-4 w-4 rounded border-white/20 bg-transparent"
                   checked={deleteDontShowAgain}
-                  onChange={(e) => setDeleteDontShowAgain(e.target.checked)}
+                  onChange={(e) =>
+                    setDeleteDontShowAgain(e.target.checked)
+                  }
                 />
-                <span className="text-sm leading-5 text-white/75">
-                  Do not show this confirmation again for menu item deletion
-                </span>
+                Don't ask again
               </label>
 
               <div className="grid grid-cols-2 gap-3">
                 <button
                   onClick={closeDeleteModal}
                   disabled={deletingItemId === deleteTarget.id}
-                  className="rounded-full border border-white/10 bg-white/5 px-4 py-3 text-sm font-medium text-white/80 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="rounded-full border border-white/10 px-4 py-3 text-sm"
                 >
                   Cancel
                 </button>
@@ -618,13 +614,14 @@ export default function AddMenuContent() {
                 <button
                   onClick={handleConfirmDelete}
                   disabled={
-                    deletingItemId === deleteTarget.id || !deleteNameMatches
+                    deletingItemId === deleteTarget.id ||
+                    !deleteNameMatches
                   }
-                  className="rounded-full bg-red-500 px-4 py-3 text-sm font-medium text-white transition hover:bg-red-400 disabled:cursor-not-allowed disabled:bg-red-500/20 disabled:text-white/40"
+                  className="rounded-full bg-red-500 px-4 py-3 text-sm font-medium text-white disabled:opacity-40"
                 >
                   {deletingItemId === deleteTarget.id
                     ? "Deleting..."
-                    : "Delete Item"}
+                    : "Delete"}
                 </button>
               </div>
             </div>
