@@ -69,30 +69,6 @@ function getEffectiveStatus(request: Request): Status {
   return request.status;
 }
 
-function formatDuration(ms: number) {
-  if (ms <= 0) return "—";
-
-  const totalMinutes = Math.round(ms / 60000);
-
-  if (totalMinutes < 60) {
-    return `${totalMinutes}m`;
-  }
-
-  const hours = Math.floor(totalMinutes / 60);
-  const minutes = totalMinutes % 60;
-
-  if (minutes === 0) {
-    return `${hours}h`;
-  }
-
-  return `${hours}h ${minutes}m`;
-}
-
-function getAverageDuration(values: number[]) {
-  if (values.length === 0) return 0;
-  return values.reduce((sum, value) => sum + value, 0) / values.length;
-}
-
 function groupRequestsByItem(
   items: Request[],
   status: Status
@@ -269,86 +245,6 @@ export default function QueueTab() {
 
   const totalVisibleGroups =
     pendingGroups.length + preparingGroups.length + readyGroups.length;
-
-  const prepDurations = useMemo(() => {
-    return requests
-      .map((request) => {
-        const pendingMs = timestampToMillis(request.pendingAt);
-        const preparingMs = timestampToMillis(request.preparingAt);
-
-        if (pendingMs > 0 && preparingMs > pendingMs) {
-          return preparingMs - pendingMs;
-        }
-
-        return 0;
-      })
-      .filter((value) => value > 0);
-  }, [requests]);
-
-  const readyDurations = useMemo(() => {
-    return requests
-      .map((request) => {
-        const preparingMs = timestampToMillis(request.preparingAt);
-        const readyMs = timestampToMillis(request.readyAt);
-
-        if (preparingMs > 0 && readyMs > preparingMs) {
-          return readyMs - preparingMs;
-        }
-
-        return 0;
-      })
-      .filter((value) => value > 0);
-  }, [requests]);
-
-  const pickupDurations = useMemo(() => {
-    return requests
-      .map((request) => {
-        const readyMs = timestampToMillis(request.readyAt);
-        const completedMs = timestampToMillis(request.completedAt);
-
-        if (readyMs > 0 && completedMs > readyMs) {
-          return completedMs - readyMs;
-        }
-
-        return 0;
-      })
-      .filter((value) => value > 0);
-  }, [requests]);
-
-  const totalFlowDurations = useMemo(() => {
-    return requests
-      .map((request) => {
-        const pendingMs = timestampToMillis(request.pendingAt);
-        const completedMs = timestampToMillis(request.completedAt);
-
-        if (pendingMs > 0 && completedMs > pendingMs) {
-          return completedMs - pendingMs;
-        }
-
-        return 0;
-      })
-      .filter((value) => value > 0);
-  }, [requests]);
-
-  const avgPrepTime = useMemo(
-    () => formatDuration(getAverageDuration(prepDurations)),
-    [prepDurations]
-  );
-
-  const avgReadyTime = useMemo(
-    () => formatDuration(getAverageDuration(readyDurations)),
-    [readyDurations]
-  );
-
-  const avgPickupTime = useMemo(
-    () => formatDuration(getAverageDuration(pickupDurations)),
-    [pickupDurations]
-  );
-
-  const avgTotalFlowTime = useMemo(
-    () => formatDuration(getAverageDuration(totalFlowDurations)),
-    [totalFlowDurations]
-  );
 
   const handleStatusUpdate = async (
     requestIds: string[],
@@ -528,42 +424,6 @@ export default function QueueTab() {
               </p>
               <p className="mt-1 text-lg font-semibold text-white">
                 {totalVisibleGroups}
-              </p>
-            </div>
-
-            <div className="rounded-2xl border border-[#8FB3FF]/12 bg-[#8FB3FF]/8 px-4 py-3">
-              <p className="text-[10px] uppercase tracking-[0.16em] text-[#BCD2FF]/70">
-                Avg Prep
-              </p>
-              <p className="mt-1 text-lg font-semibold text-[#CFE0FF]">
-                {avgPrepTime}
-              </p>
-            </div>
-
-            <div className="rounded-2xl border border-[#8B5CFF]/12 bg-[#8B5CFF]/8 px-4 py-3">
-              <p className="text-[10px] uppercase tracking-[0.16em] text-[#D7C7FF]/75">
-                Avg To Ready
-              </p>
-              <p className="mt-1 text-lg font-semibold text-[#E9E0FF]">
-                {avgReadyTime}
-              </p>
-            </div>
-
-            <div className="rounded-2xl border border-emerald-400/12 bg-emerald-500/8 px-4 py-3">
-              <p className="text-[10px] uppercase tracking-[0.16em] text-emerald-200/70">
-                Avg Pickup
-              </p>
-              <p className="mt-1 text-lg font-semibold text-emerald-200">
-                {avgPickupTime}
-              </p>
-            </div>
-
-            <div className="rounded-2xl border border-white/8 bg-white/5 px-4 py-3">
-              <p className="text-[10px] uppercase tracking-[0.16em] text-white/40">
-                Avg Total Flow
-              </p>
-              <p className="mt-1 text-lg font-semibold text-white">
-                {avgTotalFlowTime}
               </p>
             </div>
           </div>
