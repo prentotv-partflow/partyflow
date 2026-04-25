@@ -553,20 +553,26 @@ setCartPulse(true);
           ids.push(requestRef.id);
 
           transaction.set(requestRef, {
-            eventId: session.eventId,
-            guestId: session.guestId,
-            guestName: session.guestName,
-            itemName: item.itemName,
-            quantity: item.quantity,
-            status: "pending",
-            orderNumber,
-            orderGroupId,
-            createdAt: serverTimestamp(),
-            pendingAt: serverTimestamp(),
-            preparingAt: null,
-            readyAt: null,
-            completedAt: null,
-          });
+  eventId: session.eventId,
+  guestId: session.guestId,
+  guestName: session.guestName,
+
+  // critical inventory link
+  menuItemId: item.itemId,
+
+  itemName: item.itemName,
+  quantity: item.quantity,
+
+  status: "pending",
+  orderNumber,
+  orderGroupId,
+
+  createdAt: serverTimestamp(),
+  pendingAt: serverTimestamp(),
+  preparingAt: null,
+  readyAt: null,
+  completedAt: null,
+});
         });
 
         return ids;

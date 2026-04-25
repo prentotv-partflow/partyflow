@@ -9,6 +9,7 @@ import {
   onSnapshot,
   orderBy,
   query,
+  runTransaction,
   serverTimestamp,
   updateDoc,
 } from "firebase/firestore";
@@ -32,6 +33,12 @@ type FirestoreTimestampLike = {
   nanoseconds?: number;
   toMillis?: () => number;
 } | null;
+
+type RequestWithInventory = Request & {
+  menuItemId?: string;
+  itemId?: string;
+  menuId?: string;
+};
 
 function timestampToMillis(value?: FirestoreTimestampLike) {
   if (!value) return 0;
@@ -67,6 +74,10 @@ function getEffectiveStatus(request: Request): Status {
   if (pendingMs > 0) return "pending";
 
   return request.status;
+}
+
+function getMenuItemIdFromRequest(request: RequestWithInventory) {
+  return request.menuItemId || request.itemId || request.menuId || "";
 }
 
 function groupRequestsByItem(
@@ -108,7 +119,10 @@ function groupRequestsByItem(
   }
 
   return Array.from(groups.values()).sort((a, b) => {
-    return getCreatedAtValue(b.latestCreatedAt) - getCreatedAtValue(a.latestCreatedAt);
+    return (
+      getCreatedAtValue(b.latestCreatedAt) -
+      getCreatedAtValue(a.latestCreatedAt)
+    );
   });
 }
 
@@ -153,7 +167,10 @@ function groupReadyRequestsByOrder(items: Request[]): ReadyGuestCard[] {
   }
 
   return Array.from(groups.values()).sort((a, b) => {
-    return getCreatedAtValue(b.latestCreatedAt) - getCreatedAtValue(a.latestCreatedAt);
+    return (
+      getCreatedAtValue(b.latestCreatedAt) -
+      getCreatedAtValue(a.latestCreatedAt)
+    );
   });
 }
 
@@ -248,7 +265,7 @@ export default function QueueTab() {
 
   const handleStatusUpdate = async (
     requestIds: string[],
-    nextStatus: "preparing" | "ready" | "completed"
+    nextStatus: "preparing" | "ready"
   ) => {
     if (!eventId || requestIds.length === 0) return;
 
@@ -272,16 +289,9 @@ export default function QueueTab() {
             });
           }
 
-          if (nextStatus === "ready") {
-            return updateDoc(requestRef, {
-              status: "ready",
-              readyAt: serverTimestamp(),
-            });
-          }
-
           return updateDoc(requestRef, {
-            status: "completed",
-            completedAt: serverTimestamp(),
+            status: "ready",
+            readyAt: serverTimestamp(),
           });
         })
       );
@@ -292,13 +302,9 @@ export default function QueueTab() {
             ? `${idsToUpdate.length} item${
                 idsToUpdate.length === 1 ? "" : "s"
               } moved to preparing`
-            : nextStatus === "ready"
-            ? `${idsToUpdate.length} item${
-                idsToUpdate.length === 1 ? "" : "s"
-              } marked ready`
             : `${idsToUpdate.length} item${
                 idsToUpdate.length === 1 ? "" : "s"
-              } completed`,
+              } marked ready`,
         type: "success",
       });
     } catch (error) {
@@ -315,16 +321,156 @@ export default function QueueTab() {
     }
   };
 
+  const handleCompletePickup = async (requestIds: string[]) => {
+    if (!eventId || requestIds.length === 0) return;
+
+    const idsToUpdate = requestIds.filter((requestId) => {
+      return !updatingIds.includes(requestId);
+    });
+
+    if (idsToUpdate.length === 0) return;
+
+    try {
+      setUpdatingIds((prev) => [...prev, ...idsToUpdate]);
+
+      const completedCount = await runTransaction(db, async (transaction) => {
+        const requestRefs = idsToUpdate.map((requestId) =>
+          doc(db, "events", eventId, "requests", requestId)
+        );
+
+        const requestSnapshots = await Promise.all(
+          requestRefs.map((requestRef) => transaction.get(requestRef))
+        );
+
+        const eligibleRequests: {
+          requestId: string;
+          requestRef: (typeof requestRefs)[number];
+          menuItemId: string;
+          quantity: number;
+          itemName: string;
+        }[] = [];
+
+        const inventoryDeductions = new Map<string, number>();
+
+        requestSnapshots.forEach((requestSnap, index) => {
+          if (!requestSnap.exists()) {
+            throw new Error("Request not found.");
+          }
+
+          const requestData = requestSnap.data() as RequestWithInventory;
+
+          if (requestData.status === "completed" || requestData.completedAt) {
+            return;
+          }
+
+          const menuItemId = getMenuItemIdFromRequest(requestData);
+          const quantity = Math.max(Number(requestData.quantity ?? 1), 1);
+          const itemName = requestData.itemName || "Item";
+
+          if (!menuItemId) {
+            throw new Error(
+              `${itemName} is missing menuItemId. New orders must store the menu item document ID before inventory can auto-reduce.`
+            );
+          }
+
+          eligibleRequests.push({
+            requestId: idsToUpdate[index],
+            requestRef: requestRefs[index],
+            menuItemId,
+            quantity,
+            itemName,
+          });
+
+          inventoryDeductions.set(
+            menuItemId,
+            (inventoryDeductions.get(menuItemId) ?? 0) + quantity
+          );
+        });
+
+        if (eligibleRequests.length === 0) {
+          return 0;
+        }
+
+        const menuRefs = Array.from(inventoryDeductions.keys()).map(
+          (menuItemId) => doc(db, "events", eventId, "menu", menuItemId)
+        );
+
+        const menuSnapshots = await Promise.all(
+          menuRefs.map((menuRef) => transaction.get(menuRef))
+        );
+
+        menuSnapshots.forEach((menuSnap, index) => {
+          const menuRef = menuRefs[index];
+          const menuItemId = menuRef.id;
+          const deduction = inventoryDeductions.get(menuItemId) ?? 0;
+
+          if (!menuSnap.exists()) {
+            throw new Error("Menu item not found.");
+          }
+
+          const menuData = menuSnap.data() as { qty?: number; name?: string };
+          const currentQty = Number(menuData.qty ?? 0);
+
+          if (currentQty < deduction) {
+            throw new Error(
+              `${menuData.name || "Item"} only has ${currentQty} left. Cannot complete pickup for ${deduction}.`
+            );
+          }
+        });
+
+        menuSnapshots.forEach((menuSnap, index) => {
+          const menuRef = menuRefs[index];
+          const deduction = inventoryDeductions.get(menuRef.id) ?? 0;
+          const menuData = menuSnap.data() as { qty?: number };
+          const currentQty = Number(menuData.qty ?? 0);
+
+          transaction.update(menuRef, {
+            qty: currentQty - deduction,
+          });
+        });
+
+        eligibleRequests.forEach(({ requestRef }) => {
+          transaction.update(requestRef, {
+            status: "completed",
+            completedAt: serverTimestamp(),
+          });
+        });
+
+        return eligibleRequests.length;
+      });
+
+      setToast({
+        message:
+          completedCount === 0
+            ? "No eligible items to complete"
+            : `${completedCount} item${
+                completedCount === 1 ? "" : "s"
+              } completed and removed from inventory`,
+        type: "success",
+      });
+    } catch (error) {
+      console.error("Failed to complete pickup:", error);
+
+      setToast({
+        message:
+          error instanceof Error
+            ? error.message
+            : "Failed to complete pickup",
+        type: "error",
+      });
+    } finally {
+      setUpdatingIds((prev) =>
+        prev.filter((id) => !idsToUpdate.includes(id))
+      );
+    }
+  };
+
   const handleStartPreparing = async (requestIds: string[]) => {
     await handleStatusUpdate(requestIds, "preparing");
   };
 
   const handleMarkReady = async (requestIds: string[]) => {
     await handleStatusUpdate(requestIds, "ready");
-  };
-
-  const handleCompletePickup = async (requestIds: string[]) => {
-    await handleStatusUpdate(requestIds, "completed");
   };
 
   if (!eventId) {
