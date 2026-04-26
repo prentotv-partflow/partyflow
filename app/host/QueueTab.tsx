@@ -60,6 +60,57 @@ function getCreatedAtValue(createdAt?: FirestoreTimestampLike) {
   return timestampToMillis(createdAt);
 }
 
+function getPendingStartValue(request: Request) {
+  return (
+    timestampToMillis(request.pendingAt) || timestampToMillis(request.createdAt)
+  );
+}
+
+function getPendingAgeLevel(minutes: number) {
+  if (minutes >= 10) return "attention";
+  if (minutes >= 5) return "waiting";
+  return "normal";
+}
+
+function getPendingAgeLabel(minutes: number) {
+  if (minutes >= 10) return `Needs attention · ${minutes}m`;
+  if (minutes >= 5) return `Waiting ${minutes}m`;
+  return "";
+}
+
+function getGroupPendingAgeInfo(
+  requests: Request[],
+  currentTimeMs: number
+) {
+  const oldestPendingStart = requests.reduce((oldest, request) => {
+    const value = getPendingStartValue(request);
+
+    if (!value) return oldest;
+    if (!oldest) return value;
+
+    return Math.min(oldest, value);
+  }, 0);
+
+  if (!oldestPendingStart) {
+    return {
+      queueAgeMinutes: 0,
+      queueAgeLevel: "normal" as const,
+      queueAgeLabel: "",
+    };
+  }
+
+  const queueAgeMinutes = Math.max(
+    Math.floor((currentTimeMs - oldestPendingStart) / 60000),
+    0
+  );
+
+  return {
+    queueAgeMinutes,
+    queueAgeLevel: getPendingAgeLevel(queueAgeMinutes),
+    queueAgeLabel: getPendingAgeLabel(queueAgeMinutes),
+  };
+}
+
 function getEffectiveStatus(request: Request): Status {
   const completedMs = timestampToMillis(request.completedAt);
   if (completedMs > 0) return "completed";
@@ -82,7 +133,8 @@ function getMenuItemIdFromRequest(request: RequestWithInventory) {
 
 function groupRequestsByItem(
   items: Request[],
-  status: Status
+  status: Status,
+  currentTimeMs = Date.now()
 ): GroupedRequestCard[] {
   const groups = new Map<string, GroupedRequestCard>();
 
@@ -104,8 +156,15 @@ function groupRequestsByItem(
       if (requestCreatedAt >= latestCreatedAt) {
         existingGroup.latestCreatedAt = request.createdAt;
       }
+
+      if (status === "pending") {
+        Object.assign(
+          existingGroup,
+          getGroupPendingAgeInfo(existingGroup.requests, currentTimeMs)
+        );
+      }
     } else {
-      groups.set(groupKey, {
+      const newGroup: GroupedRequestCard = {
         groupKey,
         itemName: normalizedItemName,
         status,
@@ -114,7 +173,16 @@ function groupRequestsByItem(
         requestIds: [request.id],
         requests: [request],
         latestCreatedAt: request.createdAt,
-      });
+      };
+
+      if (status === "pending") {
+        Object.assign(
+          newGroup,
+          getGroupPendingAgeInfo(newGroup.requests, currentTimeMs)
+        );
+      }
+
+      groups.set(groupKey, newGroup);
     }
   }
 
@@ -182,6 +250,15 @@ export default function QueueTab() {
   const [loading, setLoading] = useState(true);
   const [updatingIds, setUpdatingIds] = useState<string[]>([]);
   const [toast, setToast] = useState<ToastState>(null);
+  const [nowMs, setNowMs] = useState(Date.now());
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setNowMs(Date.now());
+    }, 30000);
+
+    return () => clearInterval(interval);
+  }, []);
 
   useEffect(() => {
     if (!eventId) {
@@ -205,6 +282,7 @@ export default function QueueTab() {
 
         setRequests(data);
         setLoading(false);
+        setNowMs(Date.now());
       },
       (error) => {
         console.error("Queue listener error:", error);
@@ -243,8 +321,8 @@ export default function QueueTab() {
   );
 
   const pendingGroups = useMemo(
-    () => groupRequestsByItem(pendingRequests, "pending"),
-    [pendingRequests]
+    () => groupRequestsByItem(pendingRequests, "pending", nowMs),
+    [pendingRequests, nowMs]
   );
 
   const preparingGroups = useMemo(

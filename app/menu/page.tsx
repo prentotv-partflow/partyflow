@@ -163,11 +163,11 @@ function getStatusPriority(status: RequestStatus) {
   switch (status) {
     case "ready":
       return 0;
-    case "preparing":
-      return 1;
-    case "pending":
-      return 2;
     case "completed":
+      return 1;
+    case "preparing":
+      return 2;
+    case "pending":
       return 3;
     default:
       return 4;
@@ -202,9 +202,9 @@ function MenuContent() {
   const previousStatusMapRef = useRef<Record<string, RequestStatus>>({});
   const initialSnapshotLoadedRef = useRef(false);
   const activitySectionRef = useRef<HTMLElement | null>(null);
-  const addFeedbackTimeoutsRef = useRef<Record<string, ReturnType<typeof setTimeout>>>(
-    {}
-  );
+  const addFeedbackTimeoutsRef = useRef<
+    Record<string, ReturnType<typeof setTimeout>>
+  >({});
   const lastAddAtRef = useRef<Record<string, number>>({});
 
   useEffect(() => {
@@ -222,22 +222,22 @@ function MenuContent() {
   }, [eventId, router]);
 
   useEffect(() => {
-  return () => {
-    Object.values(addFeedbackTimeoutsRef.current).forEach((timeoutId) => {
-      clearTimeout(timeoutId);
-    });
-  };
-}, []);
+    return () => {
+      Object.values(addFeedbackTimeoutsRef.current).forEach((timeoutId) => {
+        clearTimeout(timeoutId);
+      });
+    };
+  }, []);
 
-useEffect(() => {
-  if (!cartPulse) return;
+  useEffect(() => {
+    if (!cartPulse) return;
 
-  const timeout = setTimeout(() => {
-    setCartPulse(false);
-  }, 170);
+    const timeout = setTimeout(() => {
+      setCartPulse(false);
+    }, 170);
 
-  return () => clearTimeout(timeout);
-}, [cartPulse]);
+    return () => clearTimeout(timeout);
+  }, [cartPulse]);
 
   useEffect(() => {
     if (!session) return;
@@ -428,10 +428,10 @@ useEffect(() => {
     }, timeoutMs);
 
     if (shouldTeach) {
-  setTaughtAddCount((prev) => prev + 1);
-}
+      setTaughtAddCount((prev) => prev + 1);
+    }
 
-setCartPulse(true);
+    setCartPulse(true);
   };
 
   const addToCart = (item: MenuItem) => {
@@ -553,26 +553,21 @@ setCartPulse(true);
           ids.push(requestRef.id);
 
           transaction.set(requestRef, {
-  eventId: session.eventId,
-  guestId: session.guestId,
-  guestName: session.guestName,
-
-  // critical inventory link
-  menuItemId: item.itemId,
-
-  itemName: item.itemName,
-  quantity: item.quantity,
-
-  status: "pending",
-  orderNumber,
-  orderGroupId,
-
-  createdAt: serverTimestamp(),
-  pendingAt: serverTimestamp(),
-  preparingAt: null,
-  readyAt: null,
-  completedAt: null,
-});
+            eventId: session.eventId,
+            guestId: session.guestId,
+            guestName: session.guestName,
+            menuItemId: item.itemId,
+            itemName: item.itemName,
+            quantity: item.quantity,
+            status: "pending",
+            orderNumber,
+            orderGroupId,
+            createdAt: serverTimestamp(),
+            pendingAt: serverTimestamp(),
+            preparingAt: null,
+            readyAt: null,
+            completedAt: null,
+          });
         });
 
         return ids;
@@ -594,37 +589,32 @@ setCartPulse(true);
     }
   };
 
-  const visibleRequests = useMemo(() => {
-    return requests.filter(
-      (req) => getEffectiveRequestStatus(req) !== "completed"
-    );
-  }, [requests]);
-
   const sortedRequests = useMemo(() => {
-    return [...visibleRequests].sort((a, b) => {
+    return [...requests].sort((a, b) => {
       const aStatus = getEffectiveRequestStatus(a);
       const bStatus = getEffectiveRequestStatus(b);
 
-      const priorityDiff = getStatusPriority(aStatus) - getStatusPriority(bStatus);
+      const priorityDiff =
+        getStatusPriority(aStatus) - getStatusPriority(bStatus);
 
       if (priorityDiff !== 0) return priorityDiff;
 
       return getLifecycleSortTime(b) - getLifecycleSortTime(a);
     });
-  }, [visibleRequests]);
+  }, [requests]);
 
   const readyCount = useMemo(() => {
+    return requests.filter((req) => getEffectiveRequestStatus(req) === "ready")
+      .length;
+  }, [requests]);
+
+  const completedCount = useMemo(() => {
     return requests.filter(
-      (req) => getEffectiveRequestStatus(req) === "ready"
+      (req) => getEffectiveRequestStatus(req) === "completed"
     ).length;
   }, [requests]);
 
-  const activeCount = useMemo(() => {
-    return requests.filter((req) => {
-      const status = getEffectiveRequestStatus(req);
-      return status === "pending" || status === "preparing";
-    }).length;
-  }, [requests]);
+  const activityAlertCount = readyCount + completedCount;
 
   const cartItemCount = useMemo(() => {
     return cart.reduce((sum, item) => sum + item.quantity, 0);
@@ -635,6 +625,8 @@ setCartPulse(true);
   }, [cart]);
 
   const hasReadyOrders = readyCount > 0;
+  const hasCompletedUpdates = completedCount > 0;
+  const hasActivityAlert = activityAlertCount > 0;
 
   const handleViewRequests = () => {
     scrollToActivitySection();
@@ -650,7 +642,8 @@ setCartPulse(true);
               alt="PartyFlow logo"
               width={40}
               height={40}
-              className="h-auto w-auto object-contain"
+              className="object-contain"
+              style={{ width: "auto", height: "auto" }}
               priority
             />
           </div>
@@ -667,45 +660,26 @@ setCartPulse(true);
     <>
       <div className="min-h-screen bg-gradient-to-b from-[#0A0C12] via-[#12162B] to-[#1B1036] text-white">
         <div className="sticky top-0 z-20 border-b border-white/5 bg-[#0A0C12]/75 backdrop-blur-xl">
-          <div className="mx-auto w-full max-w-md px-4 pb-4 pt-5">
-            <div className="flex items-center gap-4">
-              <div className="rounded-[1.35rem] border border-white/8 bg-white/[0.03] p-3">
+          <div className="mx-auto w-full max-w-md px-4 pb-3 pt-3">
+            <div className="flex items-center gap-3.5">
+              <div className="rounded-[1.2rem] border border-white/8 bg-white/[0.03] p-2">
                 <Image
                   src="/branding/partyflow-logo-interface.png"
                   alt="PartyFlow logo"
                   width={58}
                   height={58}
-                  className="h-auto w-auto object-contain"
+                  className="object-contain"
+                  style={{ width: "auto", height: "auto" }}
                   priority
                 />
               </div>
 
               <div className="min-w-0 flex-1 text-left">
-                <h1 className="mt-1 text-[29px] font-semibold leading-none tracking-tight">
-                  Party Menu
+                <h1 className="text-[31px] font-semibold leading-[0.95] tracking-tight">
+                  Event Menu
                 </h1>
-                <p className="mt-2 text-[15px] text-white/55">
-                  Welcome, {session.guestName}
-                </p>
-              </div>
-            </div>
-
-            <div className="mt-6 grid grid-cols-2 gap-3">
-              <div className="rounded-2xl border border-white/8 bg-white/5 px-4 py-2.5">
-                <p className="text-[10px] uppercase tracking-[0.16em] text-white/40">
-                  Active
-                </p>
-                <p className="mt-0.5 text-base font-semibold text-white">
-                  {activeCount}
-                </p>
-              </div>
-
-              <div className="rounded-2xl border border-emerald-400/15 bg-emerald-500/8 px-4 py-2.5">
-                <p className="text-[10px] uppercase tracking-[0.16em] text-emerald-200/70">
-                  Ready
-                </p>
-                <p className="mt-0.5 text-base font-semibold text-emerald-300">
-                  {readyCount}
+                <p className="mt-1.5 text-[15px] leading-none text-white/55">
+                  Waah Gwaan, {session.guestName}
                 </p>
               </div>
             </div>
@@ -713,45 +687,59 @@ setCartPulse(true);
             <div className="mt-3">
               <button
                 onClick={handleViewRequests}
-                className={`flex w-full items-center justify-between rounded-2xl border px-4 py-3 text-left transition ${
+                className={`flex w-full items-center justify-between rounded-2xl border px-3.5 py-2 text-left transition ${
                   hasReadyOrders
                     ? "animate-pulse border-emerald-400/35 bg-[linear-gradient(135deg,rgba(16,80,64,0.88),rgba(39,26,67,0.92))] shadow-[0_0_0_1px_rgba(52,211,153,0.12),0_0_28px_rgba(16,185,129,0.14)] hover:border-emerald-300/45 hover:shadow-[0_0_0_1px_rgba(52,211,153,0.18),0_0_32px_rgba(16,185,129,0.18)]"
+                    : hasCompletedUpdates
+                    ? "border-white/15 bg-white/8 shadow-[0_0_0_1px_rgba(255,255,255,0.06)] hover:bg-white/10"
                     : "border-[#8B5CFF]/30 bg-[#8B5CFF]/18 shadow-[0_0_0_1px_rgba(139,92,255,0.08)] hover:bg-[#8B5CFF]/26"
                 }`}
               >
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
                     <p
-                      className={`text-[10px] uppercase tracking-[0.16em] ${
-                        hasReadyOrders ? "text-emerald-200/90" : "text-[#D7C7FF]"
+                      className={`text-[9px] uppercase leading-none tracking-[0.16em] ${
+                        hasReadyOrders
+                          ? "text-emerald-200/90"
+                          : hasCompletedUpdates
+                          ? "text-white/70"
+                          : "text-[#D7C7FF]"
                       }`}
                     >
                       Your Activity
                     </p>
 
                     {hasReadyOrders ? (
-                      <span className="rounded-full border border-emerald-300/20 bg-emerald-400/12 px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.12em] text-emerald-200">
+                      <span className="rounded-full border border-emerald-300/20 bg-emerald-400/12 px-2 py-0.5 text-[9px] font-medium uppercase leading-none tracking-[0.12em] text-emerald-200">
                         Ready now
+                      </span>
+                    ) : hasCompletedUpdates ? (
+                      <span className="rounded-full border border-white/10 bg-white/8 px-2 py-0.5 text-[9px] font-medium uppercase leading-none tracking-[0.12em] text-white/70">
+                        Completed
                       </span>
                     ) : null}
                   </div>
 
-                  <p className="mt-1 text-sm font-semibold text-white">
+                  <p className="mt-1 text-[13px] font-semibold leading-tight text-white">
                     {hasReadyOrders
                       ? "Pickup Ready — View Requests"
+                      : hasCompletedUpdates
+                      ? "Pickup Updated — View Requests"
                       : "View Requests"}
                   </p>
                 </div>
 
                 <span
                   aria-hidden="true"
-                  className={`rounded-full px-3 py-1 text-sm font-medium ${
+                  className={`flex min-w-[38px] items-center justify-center rounded-full px-2.5 py-1 text-sm font-semibold ${
                     hasReadyOrders
                       ? "border border-emerald-300/20 bg-emerald-400/12 text-emerald-100"
+                      : hasCompletedUpdates
+                      ? "border border-white/10 bg-white/8 text-white/75"
                       : "border border-[#B8A6FF]/20 bg-white/5 text-[#E9E0FF]"
                   }`}
                 >
-                  →
+                  {hasActivityAlert ? activityAlertCount : "→"}
                 </span>
               </button>
             </div>
@@ -921,11 +909,14 @@ setCartPulse(true);
                   {sortedRequests.map((req) => {
                     const effectiveStatus = getEffectiveRequestStatus(req);
                     const isReady = effectiveStatus === "ready";
+                    const isCompleted = effectiveStatus === "completed";
                     const isRecent = recentRequestIds.includes(req.id);
                     const isStatusHighlighted = highlightedStatusId === req.id;
 
                     const cardClass = isReady
                       ? "border-emerald-400/22 bg-emerald-500/10"
+                      : isCompleted
+                      ? "border-white/10 bg-white/5"
                       : isRecent || isStatusHighlighted
                       ? "border-[#8B5CFF]/28 bg-[#8B5CFF]/8"
                       : "border-white/6 bg-[#101522]";
@@ -979,7 +970,11 @@ setCartPulse(true);
 
                             <p
                               className={`mt-3 text-xs ${
-                                isReady ? "text-emerald-200/90" : "text-white/48"
+                                isReady
+                                  ? "text-emerald-200/90"
+                                  : isCompleted
+                                  ? "text-white/55"
+                                  : "text-white/48"
                               }`}
                             >
                               {getStatusNote(effectiveStatus, req.orderNumber)}
@@ -999,11 +994,11 @@ setCartPulse(true);
           <div className="fixed bottom-5 left-1/2 z-40 w-[calc(100%-32px)] max-w-md -translate-x-1/2">
             <button
               onClick={() => setCartOpen(true)}
-className={`flex w-full items-center justify-between gap-3 rounded-2xl border bg-[#25153D]/95 px-4 py-4 text-left text-white backdrop-blur transition-all duration-150 hover:bg-[#2B1844]/95 ${
-  cartPulse
-    ? "border-[#B8A6FF]/45 shadow-[0_0_0_1px_rgba(184,166,255,0.14),0_12px_34px_rgba(139,92,255,0.22)]"
-    : "border-[#8B5CFF]/25 shadow-2xl"
-}`}
+              className={`flex w-full items-center justify-between gap-3 rounded-2xl border bg-[#25153D]/95 px-4 py-4 text-left text-white backdrop-blur transition-all duration-150 hover:bg-[#2B1844]/95 ${
+                cartPulse
+                  ? "border-[#B8A6FF]/45 shadow-[0_0_0_1px_rgba(184,166,255,0.14),0_12px_34px_rgba(139,92,255,0.22)]"
+                  : "border-[#8B5CFF]/25 shadow-2xl"
+              }`}
             >
               <div className="min-w-0">
                 <p className="text-[10px] uppercase tracking-[0.16em] text-[#D7C7FF]">
@@ -1165,7 +1160,8 @@ export default function GuestMenu() {
                 alt="PartyFlow logo"
                 width={40}
                 height={40}
-                className="h-auto w-auto object-contain"
+                className="object-contain"
+                style={{ width: "auto", height: "auto" }}
                 priority
               />
             </div>

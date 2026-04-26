@@ -101,6 +101,13 @@ export default function QueueView({
   ) => {
     const isPending = type === "pending";
     const hasItems = items.length > 0;
+    const hasAgedPendingItems =
+      isPending &&
+      items.some(
+        (group) =>
+          group.queueAgeLevel === "waiting" ||
+          group.queueAgeLevel === "attention"
+      );
 
     return (
       <div
@@ -111,9 +118,9 @@ export default function QueueView({
             <div className="flex flex-wrap items-center gap-2">
               <h2 className="text-base font-semibold text-white">{title}</h2>
 
-              {isPending && hasItems && (
+              {isPending && hasAgedPendingItems && (
                 <span className="rounded-full border border-yellow-400/20 bg-yellow-500/10 px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.12em] text-yellow-300">
-                  Needs attention
+                  Aging queue
                 </span>
               )}
 
@@ -156,10 +163,29 @@ export default function QueueView({
 
               const extraGuestCount = Math.max(group.requests.length - 3, 0);
 
+              const hasQueueAgeBadge =
+                isPending &&
+                group.queueAgeLevel &&
+                group.queueAgeLevel !== "normal";
+
+              const queueAgeBadgeClass =
+                group.queueAgeLevel === "attention"
+                  ? "border-red-400/25 bg-red-500/10 text-red-300"
+                  : "border-yellow-400/20 bg-yellow-500/10 text-yellow-300";
+
+              const pendingAttentionClass =
+                group.queueAgeLevel === "attention"
+                  ? "border-red-400/20 shadow-[0_0_0_1px_rgba(248,113,113,0.08),0_0_24px_rgba(248,113,113,0.06)]"
+                  : group.queueAgeLevel === "waiting"
+                  ? "border-yellow-400/16 shadow-[0_0_0_1px_rgba(250,204,21,0.08)]"
+                  : "border-white/6";
+
               return (
                 <div
                   key={group.groupKey}
-                  className={`rounded-2xl border border-white/6 bg-[#0F1218] p-4 transition duration-200 hover:border-white/12 ${glowMap[type]}`}
+                  className={`rounded-2xl border bg-[#0F1218] p-4 transition duration-200 hover:border-white/12 ${
+                    isPending ? pendingAttentionClass : "border-white/6"
+                  } ${glowMap[type]}`}
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
@@ -176,6 +202,14 @@ export default function QueueView({
                           {group.orderCount}{" "}
                           {group.orderCount === 1 ? "order" : "orders"}
                         </span>
+
+                        {hasQueueAgeBadge ? (
+                          <span
+                            className={`rounded-full border px-2.5 py-1 text-xs font-medium ${queueAgeBadgeClass}`}
+                          >
+                            {group.queueAgeLabel}
+                          </span>
+                        ) : null}
                       </div>
                     </div>
 
@@ -387,9 +421,7 @@ export default function QueueView({
   };
 
   const isEmpty =
-    pending.length === 0 &&
-    preparing.length === 0 &&
-    ready.length === 0;
+    pending.length === 0 && preparing.length === 0 && ready.length === 0;
 
   if (isEmpty) {
     return (

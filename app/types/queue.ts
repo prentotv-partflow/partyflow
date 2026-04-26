@@ -1,8 +1,11 @@
-export type Status =
-  | "pending"
-  | "preparing"
-  | "ready"
-  | "completed";
+export type MenuItem = {
+  id: string;
+  name: string;
+  qty: number;
+  price?: number;
+};
+
+export type Status = "pending" | "preparing" | "ready" | "completed";
 
 export type FirestoreTimestampLike = {
   seconds?: number;
@@ -10,11 +13,15 @@ export type FirestoreTimestampLike = {
   toMillis?: () => number;
 } | null;
 
+export type QueueAgeLevel = "normal" | "waiting" | "attention";
+
 export type Request = {
   id: string;
-  guestName: string;
+  eventId?: string;
+  guestId: string;
+  guestName?: string;
   itemName: string;
-  quantity?: number;
+  quantity: number;
   status: Status;
   orderNumber?: number;
   orderGroupId?: string;
@@ -34,6 +41,11 @@ export type GroupedRequestCard = {
   requestIds: string[];
   requests: Request[];
   latestCreatedAt?: FirestoreTimestampLike;
+
+  // Queue aging metadata for pending host groups
+  queueAgeMinutes?: number;
+  queueAgeLevel?: QueueAgeLevel;
+  queueAgeLabel?: string;
 };
 
 export type ReadyGuestCard = {
