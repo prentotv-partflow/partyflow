@@ -11,6 +11,8 @@ type Props = {
   onMarkReady: (requestIds: string[]) => void;
   onCompletePickup: (requestIds: string[]) => void;
   updatingIds?: string[];
+  actionsDisabled?: boolean;
+  reliabilityMessage?: string;
 };
 
 type ColumnType = "pending" | "preparing" | "ready";
@@ -44,12 +46,12 @@ function getColumnSummary(type: ColumnType, count: number) {
     case "pending":
       return count === 0
         ? "No active groups"
-        : `${count} ${count === 1 ? "group" : "groups"} waiting`;
+        : `${count} ${count === 1 ? "batch" : "batches"} waiting`;
 
     case "preparing":
       return count === 0
-        ? "No active groups"
-        : `${count} ${count === 1 ? "group" : "groups"} in progress`;
+        ? "No active batches"
+        : `${count} ${count === 1 ? "batch" : "batches"} in progress`;
 
     case "ready":
       return count === 0
@@ -77,6 +79,8 @@ export default function QueueView({
   onMarkReady,
   onCompletePickup,
   updatingIds = [],
+  actionsDisabled = false,
+  reliabilityMessage = "",
 }: Props) {
   const [readySearch, setReadySearch] = useState("");
 
@@ -126,7 +130,7 @@ export default function QueueView({
 
               {!isPending && hasItems && (
                 <span className="rounded-full border border-[#508CFF]/20 bg-[#508CFF]/10 px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.12em] text-[#9FC0FF]">
-                  In motion
+                  Active batch
                 </span>
               )}
             </div>
@@ -180,12 +184,18 @@ export default function QueueView({
                   ? "border-yellow-400/16 shadow-[0_0_0_1px_rgba(250,204,21,0.08)]"
                   : "border-white/6";
 
+              const activeBatchClass = isUpdating
+                ? "border-[#8B5CFF]/28 bg-[#151022] shadow-[0_0_0_1px_rgba(139,92,255,0.12),0_0_24px_rgba(139,92,255,0.08)]"
+                : isPending
+                ? pendingAttentionClass
+                : "border-white/6";
+
+              const buttonDisabled = isUpdating || actionsDisabled;
+
               return (
                 <div
                   key={group.groupKey}
-                  className={`rounded-2xl border bg-[#0F1218] p-4 transition duration-200 hover:border-white/12 ${
-                    isPending ? pendingAttentionClass : "border-white/6"
-                  } ${glowMap[type]}`}
+                  className={`rounded-2xl border bg-[#0F1218] p-4 transition duration-200 hover:border-white/12 ${activeBatchClass} ${glowMap[type]}`}
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
@@ -210,13 +220,25 @@ export default function QueueView({
                             {group.queueAgeLabel}
                           </span>
                         ) : null}
+
+                        {isUpdating ? (
+                          <span className="rounded-full border border-[#8B5CFF]/25 bg-[#8B5CFF]/12 px-2.5 py-1 text-xs font-medium text-[#D7C7FF]">
+                            Batch updating
+                          </span>
+                        ) : null}
+
+                        {actionsDisabled ? (
+                          <span className="rounded-full border border-yellow-400/20 bg-yellow-500/10 px-2.5 py-1 text-xs font-medium text-yellow-300">
+                            Actions paused
+                          </span>
+                        ) : null}
                       </div>
                     </div>
 
                     <span
                       className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-medium capitalize ${badgeMap[type]}`}
                     >
-                      {type}
+                      {isPending ? "pending" : "batch"}
                     </span>
                   </div>
 
@@ -237,22 +259,36 @@ export default function QueueView({
                     </p>
                   </div>
 
+                  {actionsDisabled && reliabilityMessage ? (
+                    <p className="mt-3 text-xs leading-5 text-yellow-200/60">
+                      {reliabilityMessage}
+                    </p>
+                  ) : null}
+
                   <div className="mt-4">
                     {type === "pending" ? (
                       <button
                         onClick={() => onStartPreparing(group.requestIds)}
-                        disabled={isUpdating}
+                        disabled={buttonDisabled}
                         className="w-full rounded-full bg-yellow-500 px-4 py-3 text-sm font-medium text-black transition hover:opacity-90 active:scale-[0.99] disabled:cursor-not-allowed disabled:bg-gray-300 disabled:text-gray-500"
                       >
-                        {isUpdating ? "Updating..." : "Start Preparing"}
+                        {isUpdating
+                          ? "Starting batch..."
+                          : actionsDisabled
+                          ? "Waiting for live sync"
+                          : "Start Batch"}
                       </button>
                     ) : (
                       <button
                         onClick={() => onMarkReady(group.requestIds)}
-                        disabled={isUpdating}
+                        disabled={buttonDisabled}
                         className="w-full rounded-full bg-[#508CFF] px-4 py-3 text-sm font-medium text-white transition hover:opacity-90 active:scale-[0.99] disabled:cursor-not-allowed disabled:bg-gray-300 disabled:text-gray-500"
                       >
-                        {isUpdating ? "Updating..." : "Mark Ready"}
+                        {isUpdating
+                          ? "Marking batch ready..."
+                          : actionsDisabled
+                          ? "Waiting for live sync"
+                          : "Batch Ready"}
                       </button>
                     )}
                   </div>
@@ -338,11 +374,16 @@ export default function QueueView({
 
               const itemEntries = Object.entries(uniqueItemLines);
               const orderNumber = getPrimaryOrderNumber(group.requests);
+              const buttonDisabled = isUpdating || actionsDisabled;
 
               return (
                 <div
                   key={group.groupKey}
-                  className={`rounded-2xl border border-white/6 bg-[#0F1218] p-4 transition duration-200 hover:border-white/12 ${glowMap.ready}`}
+                  className={`rounded-2xl border bg-[#0F1218] p-4 transition duration-200 hover:border-white/12 ${
+                    isUpdating
+                      ? "border-[#8B5CFF]/28 bg-[#151022] shadow-[0_0_0_1px_rgba(139,92,255,0.12),0_0_24px_rgba(139,92,255,0.08)]"
+                      : "border-white/6"
+                  } ${glowMap.ready}`}
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
@@ -365,6 +406,18 @@ export default function QueueView({
                           {group.orderCount}{" "}
                           {group.orderCount === 1 ? "order" : "orders"}
                         </span>
+
+                        {isUpdating ? (
+                          <span className="rounded-full border border-[#8B5CFF]/25 bg-[#8B5CFF]/12 px-2.5 py-1 text-xs font-medium text-[#D7C7FF]">
+                            Completing pickup
+                          </span>
+                        ) : null}
+
+                        {actionsDisabled ? (
+                          <span className="rounded-full border border-yellow-400/20 bg-yellow-500/10 px-2.5 py-1 text-xs font-medium text-yellow-300">
+                            Actions paused
+                          </span>
+                        ) : null}
                       </div>
                     </div>
 
@@ -402,13 +455,23 @@ export default function QueueView({
                     </div>
                   </div>
 
+                  {actionsDisabled && reliabilityMessage ? (
+                    <p className="mt-3 text-xs leading-5 text-yellow-200/60">
+                      {reliabilityMessage}
+                    </p>
+                  ) : null}
+
                   <div className="mt-4">
                     <button
                       onClick={() => onCompletePickup(group.requestIds)}
-                      disabled={isUpdating}
+                      disabled={buttonDisabled}
                       className="w-full rounded-full bg-emerald-400 px-4 py-3 text-sm font-medium text-black transition hover:opacity-90 active:scale-[0.99] disabled:cursor-not-allowed disabled:bg-gray-300 disabled:text-gray-500"
                     >
-                      {isUpdating ? "Updating..." : "Complete Pickup"}
+                      {isUpdating
+                        ? "Completing pickup..."
+                        : actionsDisabled
+                        ? "Waiting for live sync"
+                        : "Complete Pickup"}
                     </button>
                   </div>
                 </div>

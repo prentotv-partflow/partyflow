@@ -54,6 +54,11 @@ type CartItem = {
 
 type AddFeedbackMode = "idle" | "teach" | "pulse";
 
+type CachedRequestItem = Omit<
+  RequestItem,
+  "createdAt" | "pendingAt" | "preparingAt" | "readyAt" | "completedAt"
+>;
+
 function timestampToMillis(value?: FirestoreTimestampLike) {
   if (!value) return 0;
 
@@ -174,6 +179,87 @@ function getStatusPriority(status: RequestStatus) {
   }
 }
 
+function getGuestStorageKey(
+  eventId: string,
+  guestId: string,
+  key: "cart" | "menu" | "requests"
+) {
+  return `partyflow_guest_${key}_${eventId}_${guestId}`;
+}
+
+function readLocalJson<T>(key: string, fallback: T): T {
+  try {
+    const raw = window.localStorage.getItem(key);
+    if (!raw) return fallback;
+    return JSON.parse(raw) as T;
+  } catch {
+    return fallback;
+  }
+}
+
+function writeLocalJson<T>(key: string, value: T) {
+  try {
+    window.localStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    // Ignore storage failures so the live app remains usable.
+  }
+}
+
+function sanitizeCartItems(value: unknown): CartItem[] {
+  if (!Array.isArray(value)) return [];
+
+  return value.filter((item): item is CartItem => {
+    if (!item || typeof item !== "object") return false;
+
+    const maybeItem = item as CartItem;
+
+    return (
+      typeof maybeItem.itemId === "string" &&
+      typeof maybeItem.itemName === "string" &&
+      typeof maybeItem.quantity === "number" &&
+      maybeItem.quantity > 0 &&
+      typeof maybeItem.price === "number" &&
+      maybeItem.price >= 0
+    );
+  });
+}
+
+function sanitizeMenuItems(value: unknown): MenuItem[] {
+  if (!Array.isArray(value)) return [];
+
+  return value.filter((item): item is MenuItem => {
+    if (!item || typeof item !== "object") return false;
+
+    const maybeItem = item as MenuItem;
+
+    return (
+      typeof maybeItem.id === "string" &&
+      typeof maybeItem.name === "string" &&
+      typeof maybeItem.qty === "number" &&
+      maybeItem.qty >= 0
+    );
+  });
+}
+
+function sanitizeCachedRequests(value: unknown): RequestItem[] {
+  if (!Array.isArray(value)) return [];
+
+  return value.filter((item): item is RequestItem => {
+    if (!item || typeof item !== "object") return false;
+
+    const maybeItem = item as CachedRequestItem;
+
+    return (
+      typeof maybeItem.id === "string" &&
+      typeof maybeItem.itemName === "string" &&
+      typeof maybeItem.quantity === "number" &&
+      maybeItem.quantity > 0 &&
+      typeof maybeItem.guestId === "string" &&
+      ["pending", "preparing", "ready", "completed"].includes(maybeItem.status)
+    );
+  });
+}
+
 function MenuContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -184,10 +270,15 @@ function MenuContent() {
   const [menu, setMenu] = useState<MenuItem[]>([]);
   const [requests, setRequests] = useState<RequestItem[]>([]);
   const [cart, setCart] = useState<CartItem[]>([]);
+  const [menuSearch, setMenuSearch] = useState("");
   const [toast, setToast] = useState<string | null>(null);
   const [checking, setChecking] = useState(true);
   const [submittingCart, setSubmittingCart] = useState(false);
   const [cartOpen, setCartOpen] = useState(false);
+  const [cartHydrated, setCartHydrated] = useState(false);
+  const [menuLiveSync, setMenuLiveSync] = useState(false);
+  const [requestsLiveSync, setRequestsLiveSync] = useState(false);
+  const [usingCachedData, setUsingCachedData] = useState(false);
   const [recentRequestIds, setRecentRequestIds] = useState<string[]>([]);
   const [highlightedStatusId, setHighlightedStatusId] = useState<string | null>(
     null
@@ -220,6 +311,67 @@ function MenuContent() {
 
     router.replace(`/event?event=${eventId}`);
   }, [eventId, router]);
+
+  useEffect(() => {
+    if (!session) return;
+
+    const cartKey = getGuestStorageKey(
+      session.eventId,
+      session.guestId,
+      "cart"
+    );
+    const menuKey = getGuestStorageKey(
+      session.eventId,
+      session.guestId,
+      "menu"
+    );
+    const requestsKey = getGuestStorageKey(
+      session.eventId,
+      session.guestId,
+      "requests"
+    );
+
+    const restoredCart = sanitizeCartItems(readLocalJson(cartKey, []));
+    const cachedMenu = sanitizeMenuItems(readLocalJson(menuKey, []));
+    const cachedRequests = sanitizeCachedRequests(
+      readLocalJson(requestsKey, [])
+    );
+
+    setCart(restoredCart);
+    setCartHydrated(true);
+
+    if (cachedMenu.length > 0) {
+      setMenu(cachedMenu);
+      setUsingCachedData(true);
+    }
+
+    if (cachedRequests.length > 0) {
+      setRequests(cachedRequests);
+      setUsingCachedData(true);
+
+      const cachedStatusMap: Record<string, RequestStatus> = {};
+      cachedRequests.forEach((req) => {
+        cachedStatusMap[req.id] = getEffectiveRequestStatus(req);
+      });
+      previousStatusMapRef.current = cachedStatusMap;
+    }
+
+    initialSnapshotLoadedRef.current = false;
+    setMenuLiveSync(false);
+    setRequestsLiveSync(false);
+  }, [session]);
+
+  useEffect(() => {
+    if (!session || !cartHydrated) return;
+
+    const cartKey = getGuestStorageKey(
+      session.eventId,
+      session.guestId,
+      "cart"
+    );
+
+    writeLocalJson(cartKey, cart);
+  }, [cart, cartHydrated, session]);
 
   useEffect(() => {
     return () => {
@@ -255,6 +407,18 @@ function MenuContent() {
         );
 
         setMenu(items);
+        setMenuLiveSync(true);
+        setUsingCachedData(false);
+
+        writeLocalJson(
+          getGuestStorageKey(session.eventId, session.guestId, "menu"),
+          items
+        );
+      },
+      () => {
+        setMenuLiveSync(false);
+        setUsingCachedData(true);
+        setToast("Connection interrupted. Showing last known menu.");
       }
     );
 
@@ -279,6 +443,22 @@ function MenuContent() {
             });
           }
         });
+
+        setRequestsLiveSync(true);
+        setUsingCachedData(false);
+
+        writeLocalJson(
+          getGuestStorageKey(session.eventId, session.guestId, "requests"),
+          list.map((request) => ({
+            id: request.id,
+            itemName: request.itemName,
+            quantity: request.quantity,
+            status: getEffectiveRequestStatus(request),
+            guestId: request.guestId,
+            orderNumber: request.orderNumber,
+            orderGroupId: request.orderGroupId,
+          }))
+        );
 
         if (!initialSnapshotLoadedRef.current) {
           const initialStatusMap: Record<string, RequestStatus> = {};
@@ -315,6 +495,11 @@ function MenuContent() {
 
         previousStatusMapRef.current = nextStatusMap;
         setRequests(list);
+      },
+      () => {
+        setRequestsLiveSync(false);
+        setUsingCachedData(true);
+        setToast("Connection interrupted. Showing last known activity.");
       }
     );
 
@@ -360,6 +545,20 @@ function MenuContent() {
 
     return () => clearTimeout(timeout);
   }, [activityJumpHighlight]);
+
+  const liveSyncReady = menuLiveSync && requestsLiveSync;
+
+  const connectionLabel = liveSyncReady
+    ? "Live sync"
+    : usingCachedData
+    ? "Cached mode"
+    : "Connecting";
+
+  const connectionClass = liveSyncReady
+    ? "border-emerald-400/20 bg-emerald-500/10 text-emerald-200"
+    : usingCachedData
+    ? "border-yellow-400/20 bg-yellow-500/10 text-yellow-200"
+    : "border-white/10 bg-white/5 text-white/55";
 
   const scrollToActivitySection = () => {
     if (!activitySectionRef.current) return;
@@ -511,6 +710,11 @@ function MenuContent() {
   const handleSubmitCart = async () => {
     if (!session || cart.length === 0 || submittingCart) return;
 
+    if (!liveSyncReady) {
+      setToast("Waiting for live sync before sending order");
+      return;
+    }
+
     try {
       setSubmittingCart(true);
 
@@ -582,8 +786,10 @@ function MenuContent() {
           scrollToActivitySection();
         });
       });
-    } catch (err: any) {
-      setToast(err?.message || "Failed to submit order");
+    } catch (err: unknown) {
+      const message =
+        err instanceof Error ? err.message : "Failed to submit order";
+      setToast(message);
     } finally {
       setSubmittingCart(false);
     }
@@ -602,6 +808,62 @@ function MenuContent() {
       return getLifecycleSortTime(b) - getLifecycleSortTime(a);
     });
   }, [requests]);
+
+  const filteredMenu = useMemo(() => {
+    const query = menuSearch.trim().toLowerCase();
+
+    if (!query) return menu;
+
+    return menu.filter((item) => item.name.toLowerCase().includes(query));
+  }, [menu, menuSearch]);
+
+  const lastReorderRequest = useMemo(() => {
+    const sortedByRecent = requests
+      .map((request, index) => ({ request, index }))
+      .sort((a, b) => {
+        const timeDiff =
+          getLifecycleSortTime(b.request) - getLifecycleSortTime(a.request);
+
+        if (timeDiff !== 0) return timeDiff;
+
+        return b.index - a.index;
+      });
+
+    return sortedByRecent.find(({ request }) =>
+      menu.some(
+        (item) => item.name.toLowerCase() === request.itemName.toLowerCase()
+      )
+    )?.request;
+  }, [menu, requests]);
+
+  const lastReorderMenuItem = useMemo(() => {
+    if (!lastReorderRequest) return null;
+
+    return (
+      menu.find(
+        (item) =>
+          item.name.toLowerCase() === lastReorderRequest.itemName.toLowerCase()
+      ) ?? null
+    );
+  }, [lastReorderRequest, menu]);
+
+  const handleReorderLastItem = () => {
+    if (!lastReorderMenuItem) {
+      setToast("That item is no longer available");
+      return;
+    }
+
+    const hasPrice =
+      typeof lastReorderMenuItem.price === "number" &&
+      lastReorderMenuItem.price >= 0;
+
+    if (!hasPrice || lastReorderMenuItem.qty <= 0) {
+      setToast("That item is no longer available");
+      return;
+    }
+
+    addToCart(lastReorderMenuItem);
+  };
 
   const readyCount = useMemo(() => {
     return requests.filter((req) => getEffectiveRequestStatus(req) === "ready")
@@ -675,12 +937,22 @@ function MenuContent() {
               </div>
 
               <div className="min-w-0 flex-1 text-left">
-                <h1 className="text-[31px] font-semibold leading-[0.95] tracking-tight">
-                  Event Menu
-                </h1>
-                <p className="mt-1.5 text-[15px] leading-none text-white/55">
-                  Waah Gwaan, {session.guestName}
-                </p>
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <h1 className="text-[31px] font-semibold leading-[0.95] tracking-tight">
+                      Event Menu
+                    </h1>
+                    <p className="mt-1.5 text-[15px] leading-none text-white/55">
+                      Waah Gwaan, {session.guestName}
+                    </p>
+                  </div>
+
+                  <span
+                    className={`shrink-0 rounded-full border px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.12em] ${connectionClass}`}
+                  >
+                    {connectionLabel}
+                  </span>
+                </div>
               </div>
             </div>
 
@@ -747,6 +1019,13 @@ function MenuContent() {
         </div>
 
         <div className="mx-auto w-full max-w-md space-y-4 px-4 py-4 pb-28">
+          {!liveSyncReady && usingCachedData ? (
+            <div className="rounded-2xl border border-yellow-400/18 bg-yellow-500/10 px-4 py-3 text-xs leading-5 text-yellow-100/85">
+              Showing last known event data. New orders are paused until live
+              sync reconnects.
+            </div>
+          ) : null}
+
           <section className="overflow-hidden rounded-3xl border border-[#8B5CFF]/15 bg-[#1B1F2C]/95 shadow-[0_10px_30px_rgba(0,0,0,0.22)]">
             <div className="border-b border-white/6 px-4 py-4">
               <p className="text-[10px] uppercase tracking-[0.18em] text-[#B8A6FF]">
@@ -763,7 +1042,45 @@ function MenuContent() {
               </p>
             </div>
 
-            <div className="p-4">
+            <div className="space-y-3 p-4">
+              {lastReorderMenuItem ? (
+                <button
+                  onClick={handleReorderLastItem}
+                  className="flex w-full items-center justify-between gap-3 rounded-2xl border border-[#8B5CFF]/20 bg-[#8B5CFF]/10 px-4 py-3 text-left transition hover:border-[#B8A6FF]/30 hover:bg-[#8B5CFF]/16"
+                >
+                  <div className="min-w-0">
+                    <p className="text-[10px] uppercase tracking-[0.16em] text-[#B8A6FF]">
+                      Quick reorder
+                    </p>
+                    <p className="mt-1 truncate text-sm font-semibold text-white">
+                      Reorder last: {lastReorderMenuItem.name}
+                    </p>
+                  </div>
+
+                  <span className="shrink-0 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-[#E9E0FF]">
+                    + Add
+                  </span>
+                </button>
+              ) : null}
+
+              {menu.length > 0 ? (
+                <div className="rounded-2xl border border-white/6 bg-[#101522] px-4 py-3">
+                  <label
+                    htmlFor="menu-search"
+                    className="text-[10px] uppercase tracking-[0.16em] text-white/35"
+                  >
+                    Search menu
+                  </label>
+                  <input
+                    id="menu-search"
+                    value={menuSearch}
+                    onChange={(event) => setMenuSearch(event.target.value)}
+                    placeholder="Search drinks or items"
+                    className="mt-2 w-full bg-transparent text-sm text-white outline-none placeholder:text-white/25"
+                  />
+                </div>
+              ) : null}
+
               {menu.length === 0 ? (
                 <div className="rounded-2xl border border-white/5 bg-[#101522] px-4 py-10 text-center">
                   <p className="text-sm font-medium text-white/50">
@@ -773,9 +1090,18 @@ function MenuContent() {
                     The host has not added menu items yet.
                   </p>
                 </div>
+              ) : filteredMenu.length === 0 ? (
+                <div className="rounded-2xl border border-white/5 bg-[#101522] px-4 py-10 text-center">
+                  <p className="text-sm font-medium text-white/50">
+                    No matching items
+                  </p>
+                  <p className="mt-1 text-xs leading-5 text-white/28">
+                    Try a different search term.
+                  </p>
+                </div>
               ) : (
                 <div className="space-y-3">
-                  {menu.map((item) => {
+                  {filteredMenu.map((item) => {
                     const isOut = item.qty === 0;
                     const isLow = item.qty > 0 && item.qty <= 3;
                     const inCart = getCartQuantityForItem(item.id);
@@ -1121,6 +1447,13 @@ function MenuContent() {
                     {formatCurrency(cartTotal)}
                   </p>
                 </div>
+
+                {!liveSyncReady ? (
+                  <p className="mt-2 text-xs leading-5 text-yellow-200/80">
+                    Confirm Order is paused until live sync reconnects. Your
+                    cart is saved.
+                  </p>
+                ) : null}
               </div>
 
               <div className="grid grid-cols-2 gap-3">
@@ -1134,10 +1467,14 @@ function MenuContent() {
 
                 <button
                   onClick={handleSubmitCart}
-                  disabled={submittingCart || cart.length === 0}
+                  disabled={submittingCart || cart.length === 0 || !liveSyncReady}
                   className="rounded-full bg-white px-4 py-3 text-sm font-medium text-black transition hover:bg-gray-200 disabled:cursor-not-allowed disabled:bg-white/20 disabled:text-white/40"
                 >
-                  {submittingCart ? "Submitting..." : "Confirm Order"}
+                  {submittingCart
+                    ? "Submitting..."
+                    : !liveSyncReady
+                    ? "Syncing..."
+                    : "Confirm Order"}
                 </button>
               </div>
             </div>

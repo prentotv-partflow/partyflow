@@ -28,6 +28,8 @@ type ToastState = {
   type: ToastType;
 } | null;
 
+type ConnectionStatus = "connecting" | "live" | "reconnecting" | "error";
+
 type FirestoreTimestampLike = {
   seconds?: number;
   nanoseconds?: number;
@@ -39,6 +41,34 @@ type RequestWithInventory = Request & {
   itemId?: string;
   menuId?: string;
 };
+
+function getQueueCacheKey(eventId: string) {
+  return `partyflow_host_queue_snapshot_${eventId}`;
+}
+
+function readCachedQueue(eventId: string) {
+  if (typeof window === "undefined") return [];
+
+  try {
+    const raw = window.localStorage.getItem(getQueueCacheKey(eventId));
+    if (!raw) return [];
+
+    const parsed = JSON.parse(raw) as Request[];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeCachedQueue(eventId: string, requests: Request[]) {
+  if (typeof window === "undefined") return;
+
+  try {
+    window.localStorage.setItem(getQueueCacheKey(eventId), JSON.stringify(requests));
+  } catch {
+    // localStorage can fail in private mode or quota limits. Queue still works live.
+  }
+}
 
 function timestampToMillis(value?: FirestoreTimestampLike) {
   if (!value) return 0;
@@ -78,10 +108,7 @@ function getPendingAgeLabel(minutes: number) {
   return "";
 }
 
-function getGroupPendingAgeInfo(
-  requests: Request[],
-  currentTimeMs: number
-) {
+function getGroupPendingAgeInfo(requests: Request[], currentTimeMs: number) {
   const oldestPendingStart = requests.reduce((oldest, request) => {
     const value = getPendingStartValue(request);
 
@@ -129,6 +156,96 @@ function getEffectiveStatus(request: Request): Status {
 
 function getMenuItemIdFromRequest(request: RequestWithInventory) {
   return request.menuItemId || request.itemId || request.menuId || "";
+}
+
+function isTimestampToday(value?: FirestoreTimestampLike) {
+  const timestampMs = timestampToMillis(value);
+
+  if (!timestampMs) return false;
+
+  const timestampDate = new Date(timestampMs);
+  const now = new Date();
+
+  return (
+    timestampDate.getFullYear() === now.getFullYear() &&
+    timestampDate.getMonth() === now.getMonth() &&
+    timestampDate.getDate() === now.getDate()
+  );
+}
+
+function getMostRequestedItemLabel(requests: Request[]) {
+  const itemTotals = new Map<string, { name: string; quantity: number }>();
+
+  requests.forEach((request) => {
+    const normalizedName = request.itemName.trim();
+
+    if (!normalizedName) return;
+
+    const key = normalizedName.toLowerCase();
+    const quantity = Math.max(Number(request.quantity ?? 1), 1);
+    const existing = itemTotals.get(key);
+
+    if (existing) {
+      existing.quantity += quantity;
+      return;
+    }
+
+    itemTotals.set(key, {
+      name: normalizedName,
+      quantity,
+    });
+  });
+
+  const topItem = Array.from(itemTotals.values()).sort((a, b) => {
+    if (b.quantity !== a.quantity) return b.quantity - a.quantity;
+    return a.name.localeCompare(b.name);
+  })[0];
+
+  if (!topItem) return "No requests yet";
+
+  return `${topItem.name} · ${topItem.quantity}`;
+}
+
+function getConnectionLabel(status: ConnectionStatus) {
+  switch (status) {
+    case "connecting":
+      return "Connecting";
+    case "live":
+      return "Live";
+    case "reconnecting":
+      return "Reconnecting";
+    case "error":
+      return "Connection issue";
+    default:
+      return "Connecting";
+  }
+}
+
+function getConnectionClass(status: ConnectionStatus) {
+  switch (status) {
+    case "live":
+      return "border-emerald-400/20 bg-emerald-500/10 text-emerald-300";
+    case "connecting":
+      return "border-[#508CFF]/20 bg-[#508CFF]/10 text-[#9FC0FF]";
+    case "reconnecting":
+      return "border-yellow-400/20 bg-yellow-500/10 text-yellow-300";
+    case "error":
+      return "border-red-400/25 bg-red-500/10 text-red-300";
+    default:
+      return "border-white/10 bg-white/5 text-white/60";
+  }
+}
+
+function getReliabilityMessage(
+  status: ConnectionStatus,
+  isShowingCachedQueue: boolean
+) {
+  if (status === "live") return "";
+  if (status === "connecting") return "Connecting to live queue...";
+  if (isShowingCachedQueue) {
+    return "Reconnecting — showing last known queue. Batch actions are paused until live sync returns.";
+  }
+  return "Connection issue — batch actions are paused until live sync returns.";
 }
 
 function groupRequestsByItem(
@@ -251,6 +368,15 @@ export default function QueueTab() {
   const [updatingIds, setUpdatingIds] = useState<string[]>([]);
   const [toast, setToast] = useState<ToastState>(null);
   const [nowMs, setNowMs] = useState(Date.now());
+  const [connectionStatus, setConnectionStatus] =
+    useState<ConnectionStatus>("connecting");
+  const [isShowingCachedQueue, setIsShowingCachedQueue] = useState(false);
+
+  const actionsDisabled = connectionStatus !== "live";
+  const reliabilityMessage = getReliabilityMessage(
+    connectionStatus,
+    isShowingCachedQueue
+  );
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -264,10 +390,21 @@ export default function QueueTab() {
     if (!eventId) {
       setRequests([]);
       setLoading(false);
+      setConnectionStatus("error");
+      setIsShowingCachedQueue(false);
       return;
     }
 
     setLoading(true);
+    setConnectionStatus("connecting");
+
+    const cachedRequests = readCachedQueue(eventId);
+
+    if (cachedRequests.length > 0) {
+      setRequests(cachedRequests);
+      setIsShowingCachedQueue(true);
+      setLoading(false);
+    }
 
     const requestsRef = collection(db, "events", eventId, "requests");
     const requestsQuery = query(requestsRef, orderBy("createdAt", "asc"));
@@ -281,12 +418,27 @@ export default function QueueTab() {
         }));
 
         setRequests(data);
+        writeCachedQueue(eventId, data);
         setLoading(false);
         setNowMs(Date.now());
+        setConnectionStatus("live");
+        setIsShowingCachedQueue(false);
       },
       (error) => {
         console.error("Queue listener error:", error);
-        setRequests([]);
+
+        const cached = readCachedQueue(eventId);
+
+        if (cached.length > 0) {
+          setRequests(cached);
+          setIsShowingCachedQueue(true);
+          setConnectionStatus("reconnecting");
+        } else {
+          setRequests([]);
+          setIsShowingCachedQueue(false);
+          setConnectionStatus("error");
+        }
+
         setLoading(false);
       }
     );
@@ -320,6 +472,21 @@ export default function QueueTab() {
     [requests]
   );
 
+  const completedTodayRequests = useMemo(() => {
+    return requests.filter((request) => {
+      return (
+        getEffectiveStatus(request) === "completed" &&
+        isTimestampToday(request.completedAt)
+      );
+    });
+  }, [requests]);
+
+  const completedTodayCount = completedTodayRequests.length;
+
+  const mostRequestedItemLabel = useMemo(() => {
+    return getMostRequestedItemLabel(requests);
+  }, [requests]);
+
   const pendingGroups = useMemo(
     () => groupRequestsByItem(pendingRequests, "pending", nowMs),
     [pendingRequests, nowMs]
@@ -345,7 +512,7 @@ export default function QueueTab() {
     requestIds: string[],
     nextStatus: "preparing" | "ready"
   ) => {
-    if (!eventId || requestIds.length === 0) return;
+    if (!eventId || requestIds.length === 0 || actionsDisabled) return;
 
     const idsToUpdate = requestIds.filter((requestId) => {
       return !updatingIds.includes(requestId);
@@ -379,17 +546,17 @@ export default function QueueTab() {
           nextStatus === "preparing"
             ? `${idsToUpdate.length} item${
                 idsToUpdate.length === 1 ? "" : "s"
-              } moved to preparing`
+              } added to active batch`
             : `${idsToUpdate.length} item${
                 idsToUpdate.length === 1 ? "" : "s"
-              } marked ready`,
+              } marked batch ready`,
         type: "success",
       });
     } catch (error) {
       console.error("Failed to update grouped requests:", error);
 
       setToast({
-        message: "Failed to update request group",
+        message: "Failed to update batch",
         type: "error",
       });
     } finally {
@@ -400,7 +567,7 @@ export default function QueueTab() {
   };
 
   const handleCompletePickup = async (requestIds: string[]) => {
-    if (!eventId || requestIds.length === 0) return;
+    if (!eventId || requestIds.length === 0 || actionsDisabled) return;
 
     const idsToUpdate = requestIds.filter((requestId) => {
       return !updatingIds.includes(requestId);
@@ -570,7 +737,7 @@ export default function QueueTab() {
     );
   }
 
-  if (loading) {
+  if (loading && requests.length === 0) {
     return (
       <div className="rounded-3xl border border-white/10 bg-[#141821] p-5 sm:p-6">
         <div className="flex min-h-[220px] flex-col items-center justify-center text-center">
@@ -595,21 +762,58 @@ export default function QueueTab() {
           <div className="border-b border-white/6 px-4 py-4 sm:px-5">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
-                <p className="text-[10px] uppercase tracking-[0.18em] text-[#8FB3FF]">
-                  Live Queue
-                </p>
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="text-[10px] uppercase tracking-[0.18em] text-[#8FB3FF]">
+                    Live Queue
+                  </p>
+
+                  <span
+                    className={`rounded-full border px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.12em] ${getConnectionClass(
+                      connectionStatus
+                    )}`}
+                  >
+                    {getConnectionLabel(connectionStatus)}
+                  </span>
+                </div>
+
                 <h2 className="mt-1 text-lg font-semibold text-white">
                   Request Flow
                 </h2>
+
+                {reliabilityMessage ? (
+                  <p className="mt-2 max-w-xl text-xs leading-5 text-white/45">
+                    {reliabilityMessage}
+                  </p>
+                ) : null}
               </div>
 
-              <div className="rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-right">
-                <p className="text-[10px] uppercase tracking-[0.18em] text-white/35">
-                  Total Requests
-                </p>
-                <p className="mt-1 text-xl font-semibold text-white">
-                  {totalActiveRequests}
-                </p>
+              <div className="flex flex-wrap items-center justify-end gap-3">
+                <div className="rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-right">
+                  <p className="text-[10px] uppercase tracking-[0.18em] text-white/35">
+                    Total Requests
+                  </p>
+                  <p className="mt-1 text-xl font-semibold text-white">
+                    {totalActiveRequests}
+                  </p>
+                </div>
+
+                <div className="rounded-2xl border border-emerald-400/12 bg-emerald-500/8 px-4 py-3 text-right">
+                  <p className="text-[10px] uppercase tracking-[0.16em] text-emerald-200/70">
+                    Completed Today
+                  </p>
+                  <p className="mt-1 text-lg font-semibold text-emerald-300">
+                    {completedTodayCount}
+                  </p>
+                </div>
+
+                <div className="max-w-[160px] rounded-2xl border border-[#8B5CFF]/14 bg-[#8B5CFF]/8 px-4 py-3 text-right">
+                  <p className="text-[10px] uppercase tracking-[0.16em] text-[#D7C7FF]/75">
+                    Most Requested
+                  </p>
+                  <p className="mt-1 truncate text-sm font-semibold text-white">
+                    {mostRequestedItemLabel}
+                  </p>
+                </div>
               </div>
             </div>
           </div>
@@ -661,6 +865,8 @@ export default function QueueTab() {
           onMarkReady={handleMarkReady}
           onCompletePickup={handleCompletePickup}
           updatingIds={updatingIds}
+          actionsDisabled={actionsDisabled}
+          reliabilityMessage={reliabilityMessage}
         />
       </div>
 
