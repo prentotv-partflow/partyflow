@@ -119,13 +119,13 @@ function getStatusBadgeClass(status: RequestStatus) {
 function getStatusLabel(status: RequestStatus) {
   switch (status) {
     case "pending":
-      return "Pending";
+      return "Requested";
     case "preparing":
-      return "Preparing";
+      return "Being prepared";
     case "ready":
-      return "Ready for pickup";
+      return "Out for delivery";
     case "completed":
-      return "Completed";
+      return "Delivered";
     default:
       return status;
   }
@@ -133,17 +133,17 @@ function getStatusLabel(status: RequestStatus) {
 
 function getStatusNote(status: RequestStatus, orderNumber?: number) {
   const orderText =
-    typeof orderNumber === "number" ? ` order #${orderNumber}` : " your order";
+    typeof orderNumber === "number" ? ` request #${orderNumber}` : " your request";
 
   switch (status) {
     case "pending":
-      return "Your request is in the queue.";
+      return "Your service request is in the queue.";
     case "preparing":
-      return "Your item is being prepared.";
+      return "Your items are being prepared.";
     case "ready":
-      return `Ready for pickup. Pay at bar and give${orderText}.`;
+      return `Out for delivery. Settle with the attendant or bar and give${orderText}.`;
     case "completed":
-      return `Pickup complete for${orderText}.`;
+      return `Delivery complete for${orderText}.`;
     default:
       return "";
   }
@@ -418,7 +418,7 @@ function MenuContent() {
       () => {
         setMenuLiveSync(false);
         setUsingCachedData(true);
-        setToast("Connection interrupted. Showing last known menu.");
+        setToast("Connection interrupted. Showing last known VIP menu.");
       }
     );
 
@@ -499,7 +499,7 @@ function MenuContent() {
       () => {
         setRequestsLiveSync(false);
         setUsingCachedData(true);
-        setToast("Connection interrupted. Showing last known activity.");
+        setToast("Connection interrupted. Showing last known requests.");
       }
     );
 
@@ -711,7 +711,7 @@ function MenuContent() {
     if (!session || cart.length === 0 || submittingCart) return;
 
     if (!liveSyncReady) {
-      setToast("Waiting for live sync before sending order");
+      setToast("Waiting for live sync before sending request");
       return;
     }
 
@@ -788,7 +788,7 @@ function MenuContent() {
       });
     } catch (err: unknown) {
       const message =
-        err instanceof Error ? err.message : "Failed to submit order";
+        err instanceof Error ? err.message : "Failed to send request";
       setToast(message);
     } finally {
       setSubmittingCart(false);
@@ -876,7 +876,14 @@ function MenuContent() {
     ).length;
   }, [requests]);
 
-  const activityAlertCount = readyCount + completedCount;
+  const activeRequestCount = useMemo(() => {
+    return requests.filter((req) => {
+      const status = getEffectiveRequestStatus(req);
+      return status === "pending" || status === "preparing" || status === "ready";
+    }).length;
+  }, [requests]);
+
+  const activityAlertCount = activeRequestCount;
 
   const cartItemCount = useMemo(() => {
     return cart.reduce((sum, item) => sum + item.quantity, 0);
@@ -940,7 +947,7 @@ function MenuContent() {
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
                     <h1 className="text-[31px] font-semibold leading-[0.95] tracking-tight">
-                      Event Menu
+                      VIP Menu
                     </h1>
                     <p className="mt-1.5 text-[15px] leading-none text-white/55">
                       Waah Gwaan, {session.guestName}
@@ -978,25 +985,25 @@ function MenuContent() {
                           : "text-[#D7C7FF]"
                       }`}
                     >
-                      Your Activity
+                      Your Requests
                     </p>
 
                     {hasReadyOrders ? (
                       <span className="rounded-full border border-emerald-300/20 bg-emerald-400/12 px-2 py-0.5 text-[9px] font-medium uppercase leading-none tracking-[0.12em] text-emerald-200">
-                        Ready now
+                        Out now
                       </span>
                     ) : hasCompletedUpdates ? (
                       <span className="rounded-full border border-white/10 bg-white/8 px-2 py-0.5 text-[9px] font-medium uppercase leading-none tracking-[0.12em] text-white/70">
-                        Completed
+                        Delivered
                       </span>
                     ) : null}
                   </div>
 
                   <p className="mt-1 text-[13px] font-semibold leading-tight text-white">
                     {hasReadyOrders
-                      ? "Pickup Ready — View Requests"
+                      ? "View Requests"
                       : hasCompletedUpdates
-                      ? "Pickup Updated — View Requests"
+                      ? "View Requests"
                       : "View Requests"}
                   </p>
                 </div>
@@ -1021,24 +1028,24 @@ function MenuContent() {
         <div className="mx-auto w-full max-w-md space-y-4 px-4 py-4 pb-28">
           {!liveSyncReady && usingCachedData ? (
             <div className="rounded-2xl border border-yellow-400/18 bg-yellow-500/10 px-4 py-3 text-xs leading-5 text-yellow-100/85">
-              Showing last known event data. New orders are paused until live
-              sync reconnects.
+              Showing last known VIP service data. New requests are paused until
+              live sync reconnects.
             </div>
           ) : null}
 
           <section className="overflow-hidden rounded-3xl border border-[#8B5CFF]/15 bg-[#1B1F2C]/95 shadow-[0_10px_30px_rgba(0,0,0,0.22)]">
             <div className="border-b border-white/6 px-4 py-4">
               <p className="text-[10px] uppercase tracking-[0.18em] text-[#B8A6FF]">
-                Available Items
+                VIP Menu
               </p>
 
               <h2 className="mt-1 text-lg font-semibold text-white">
-                Order from the menu
+                Request service from your section
               </h2>
 
               <p className="mt-1 text-sm leading-6 text-white/55">
-                Add items to your cart, review the total, then confirm before
-                sending.
+                Add bottles, mixers, ice, cups, or add-ons to your request, then
+                review the total before sending.
               </p>
             </div>
 
@@ -1050,10 +1057,10 @@ function MenuContent() {
                 >
                   <div className="min-w-0">
                     <p className="text-[10px] uppercase tracking-[0.16em] text-[#B8A6FF]">
-                      Quick reorder
+                      Quick request
                     </p>
                     <p className="mt-1 truncate text-sm font-semibold text-white">
-                      Reorder last: {lastReorderMenuItem.name}
+                      Request again: {lastReorderMenuItem.name}
                     </p>
                   </div>
 
@@ -1069,13 +1076,13 @@ function MenuContent() {
                     htmlFor="menu-search"
                     className="text-[10px] uppercase tracking-[0.16em] text-white/35"
                   >
-                    Search menu
+                    Search VIP menu
                   </label>
                   <input
                     id="menu-search"
                     value={menuSearch}
                     onChange={(event) => setMenuSearch(event.target.value)}
-                    placeholder="Search drinks or items"
+                    placeholder="Search bottles, mixers, ice, or items"
                     className="mt-2 w-full bg-transparent text-sm text-white outline-none placeholder:text-white/25"
                   />
                 </div>
@@ -1084,10 +1091,10 @@ function MenuContent() {
               {menu.length === 0 ? (
                 <div className="rounded-2xl border border-white/5 bg-[#101522] px-4 py-10 text-center">
                   <p className="text-sm font-medium text-white/50">
-                    No items available
+                    No VIP items available
                   </p>
                   <p className="mt-1 text-xs leading-5 text-white/28">
-                    The host has not added menu items yet.
+                    The host has not added section-service items yet.
                   </p>
                 </div>
               ) : filteredMenu.length === 0 ? (
@@ -1154,7 +1161,7 @@ function MenuContent() {
                                 <>
                                   <span className="text-white/20">•</span>
                                   <span className="text-[#D7C7FF]">
-                                    In cart: {inCart}
+                                    In request: {inCart}
                                   </span>
                                 </>
                               ) : null}
@@ -1202,15 +1209,16 @@ function MenuContent() {
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <p className="text-[10px] uppercase tracking-[0.18em] text-[#B8A6FF]">
-                    Your Activity
+                    Your Requests
                   </p>
 
                   <h2 className="mt-1 text-lg font-semibold text-white">
-                    Your Requests
+                    Section Service
                   </h2>
 
                   <p className="mt-1 text-sm leading-6 text-white/55">
-                    Track each request as it moves through the queue.
+                    Track each request as the service team prepares and delivers
+                    it.
                   </p>
                 </div>
 
@@ -1227,7 +1235,7 @@ function MenuContent() {
                     No requests yet
                   </p>
                   <p className="mt-1 text-xs leading-5 text-white/28">
-                    Once you submit an order, it will appear here.
+                    Once you send a service request, it will appear here.
                   </p>
                 </div>
               ) : (
@@ -1265,7 +1273,7 @@ function MenuContent() {
                                 <div className="flex flex-wrap items-center gap-2">
                                   {typeof req.orderNumber === "number" ? (
                                     <span className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.12em] text-white/60">
-                                      Order #{req.orderNumber}
+                                      Request #{req.orderNumber}
                                     </span>
                                   ) : null}
 
@@ -1328,10 +1336,10 @@ function MenuContent() {
             >
               <div className="min-w-0">
                 <p className="text-[10px] uppercase tracking-[0.16em] text-[#D7C7FF]">
-                  Your Cart
+                  Your Request
                 </p>
                 <p className="mt-1 text-sm font-semibold text-white">
-                  {cartItemCount} item{cartItemCount === 1 ? "" : "s"} in cart
+                  {cartItemCount} item{cartItemCount === 1 ? "" : "s"} selected
                 </p>
               </div>
 
@@ -1339,7 +1347,7 @@ function MenuContent() {
                 <p className="text-sm font-semibold text-white">
                   {formatCurrency(cartTotal)}
                 </p>
-                <p className="mt-1 text-xs text-[#D7C7FF]">Review order</p>
+                <p className="mt-1 text-xs text-[#D7C7FF]">Review request</p>
               </div>
             </button>
           </div>
@@ -1359,11 +1367,11 @@ function MenuContent() {
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <p className="text-[10px] uppercase tracking-[0.18em] text-[#B8A6FF]">
-                    Review Order
+                    Review Request
                   </p>
-                  <h2 className="mt-1 text-lg font-semibold">Your Cart</h2>
+                  <h2 className="mt-1 text-lg font-semibold">Service Request</h2>
                   <p className="mt-1 text-sm text-white/55">
-                    Confirm before sending this order to the host queue.
+                    Confirm before sending this request to the service queue.
                   </p>
                 </div>
 
@@ -1450,8 +1458,8 @@ function MenuContent() {
 
                 {!liveSyncReady ? (
                   <p className="mt-2 text-xs leading-5 text-yellow-200/80">
-                    Confirm Order is paused until live sync reconnects. Your
-                    cart is saved.
+                    Send Request is paused until live sync reconnects. Your
+                    selected items are saved.
                   </p>
                 ) : null}
               </div>
@@ -1471,10 +1479,10 @@ function MenuContent() {
                   className="rounded-full bg-white px-4 py-3 text-sm font-medium text-black transition hover:bg-gray-200 disabled:cursor-not-allowed disabled:bg-white/20 disabled:text-white/40"
                 >
                   {submittingCart
-                    ? "Submitting..."
+                    ? "Sending..."
                     : !liveSyncReady
                     ? "Syncing..."
-                    : "Confirm Order"}
+                    : "Send Request"}
                 </button>
               </div>
             </div>
@@ -1502,9 +1510,9 @@ export default function GuestMenu() {
                 priority
               />
             </div>
-            <p className="text-sm font-medium text-white/85">Loading menu...</p>
+            <p className="text-sm font-medium text-white/85">Loading VIP menu...</p>
             <p className="mt-1 text-xs text-white/45">
-              Pulling live event data
+              Pulling live service data
             </p>
           </div>
         </div>
