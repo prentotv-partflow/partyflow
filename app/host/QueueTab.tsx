@@ -243,9 +243,9 @@ function getReliabilityMessage(
   if (status === "live") return "";
   if (status === "connecting") return "Connecting to live queue...";
   if (isShowingCachedQueue) {
-    return "Reconnecting — showing last known queue. Batch actions are paused until live sync returns.";
+    return "Reconnecting — showing last known queue. Service actions are paused until live sync returns.";
   }
-  return "Connection issue — batch actions are paused until live sync returns.";
+  return "Connection issue — service actions are paused until live sync returns.";
 }
 
 function groupRequestsByItem(
@@ -546,17 +546,17 @@ export default function QueueTab() {
           nextStatus === "preparing"
             ? `${idsToUpdate.length} item${
                 idsToUpdate.length === 1 ? "" : "s"
-              } added to active batch`
+              } added to service flow`
             : `${idsToUpdate.length} item${
                 idsToUpdate.length === 1 ? "" : "s"
-              } marked batch ready`,
+              } sent for delivery`,
         type: "success",
       });
     } catch (error) {
       console.error("Failed to update grouped requests:", error);
 
       setToast({
-        message: "Failed to update batch",
+        message: "Failed to update service flow",
         type: "error",
       });
     } finally {
@@ -690,17 +690,17 @@ export default function QueueTab() {
             ? "No eligible items to complete"
             : `${completedCount} item${
                 completedCount === 1 ? "" : "s"
-              } completed and removed from inventory`,
+              } delivered and removed from inventory`,
         type: "success",
       });
     } catch (error) {
-      console.error("Failed to complete pickup:", error);
+      console.error("Failed to mark delivered:", error);
 
       setToast({
         message:
           error instanceof Error
             ? error.message
-            : "Failed to complete pickup",
+            : "Failed to mark delivered",
         type: "error",
       });
     } finally {
@@ -764,7 +764,7 @@ export default function QueueTab() {
               <div>
                 <div className="flex flex-wrap items-center gap-2">
                   <p className="text-[10px] uppercase tracking-[0.18em] text-[#8FB3FF]">
-                    Live Queue
+                    Service Queue
                   </p>
 
                   <span
@@ -777,7 +777,7 @@ export default function QueueTab() {
                 </div>
 
                 <h2 className="mt-1 text-lg font-semibold text-white">
-                  Request Flow
+                  Service Flow
                 </h2>
 
                 {reliabilityMessage ? (

@@ -17,6 +17,24 @@ type Props = {
 
 type ColumnType = "pending" | "preparing" | "ready";
 
+type OrderGroupedCard = {
+  groupKey: string;
+  guestName: string;
+  orderNumber?: number;
+  status: "pending" | "preparing";
+  totalQuantity: number;
+  orderCount: number;
+  requestIds: string[];
+  requests: GroupedRequestCard["requests"];
+  itemLines: {
+    itemName: string;
+    quantity: number;
+  }[];
+  latestCreatedAt?: GroupedRequestCard["latestCreatedAt"];
+  queueAgeLevel?: GroupedRequestCard["queueAgeLevel"];
+  queueAgeLabel?: GroupedRequestCard["queueAgeLabel"];
+};
+
 const badgeMap: Record<ColumnType, string> = {
   pending: "border border-yellow-400/20 bg-yellow-500/10 text-yellow-300",
   preparing: "border border-[#508CFF]/20 bg-[#508CFF]/12 text-[#9FC0FF]",
@@ -41,22 +59,42 @@ const columnShellMap: Record<ColumnType, string> = {
   ready: "border-emerald-400/10",
 };
 
+function getTimestampMs(value?: {
+  seconds?: number;
+  nanoseconds?: number;
+  toMillis?: () => number;
+} | null) {
+  if (!value) return 0;
+
+  if (typeof value.toMillis === "function") {
+    return value.toMillis();
+  }
+
+  if (typeof value.seconds === "number") {
+    const nanos =
+      typeof value.nanoseconds === "number" ? value.nanoseconds : 0;
+    return value.seconds * 1000 + Math.floor(nanos / 1_000_000);
+  }
+
+  return 0;
+}
+
 function getColumnSummary(type: ColumnType, count: number) {
   switch (type) {
     case "pending":
       return count === 0
-        ? "No active groups"
-        : `${count} ${count === 1 ? "batch" : "batches"} waiting`;
+        ? "No incoming requests"
+        : `${count} ${count === 1 ? "request" : "requests"} waiting`;
 
     case "preparing":
       return count === 0
-        ? "No active batches"
-        : `${count} ${count === 1 ? "batch" : "batches"} in progress`;
+        ? "No requests in service"
+        : `${count} ${count === 1 ? "request" : "requests"} in service`;
 
     case "ready":
       return count === 0
-        ? "No ready guests"
-        : `${count} ${count === 1 ? "guest" : "guests"} ready`;
+        ? "Nothing out for delivery"
+        : `${count} ${count === 1 ? "delivery" : "deliveries"} active`;
 
     default:
       return "";
@@ -69,6 +107,134 @@ function getPrimaryOrderNumber(requests: { orderNumber?: number }[]) {
   );
 
   return found?.orderNumber;
+}
+
+function groupByOrderFromItemGroups(
+  groups: GroupedRequestCard[],
+  status: "pending" | "preparing"
+): OrderGroupedCard[] {
+  const orderMap = new Map<
+    string,
+    {
+      groupKey: string;
+      guestName: string;
+      orderNumber?: number;
+      status: "pending" | "preparing";
+      totalQuantity: number;
+      orderCount: number;
+      requestIds: string[];
+      requests: GroupedRequestCard["requests"];
+      itemMap: Map<string, { itemName: string; quantity: number }>;
+      latestCreatedAt?: GroupedRequestCard["latestCreatedAt"];
+      queueAgeLevel?: GroupedRequestCard["queueAgeLevel"];
+      queueAgeLabel?: GroupedRequestCard["queueAgeLabel"];
+    }
+  >();
+
+  groups.forEach((group) => {
+    group.requests.forEach((request) => {
+      const orderKey =
+        request.orderGroupId ||
+        (typeof request.orderNumber === "number"
+          ? `order-number-${request.orderNumber}`
+          : `request-${request.id}`);
+
+      const groupKey = `${status}__order__${orderKey}`;
+      const normalizedGuestName =
+        (request.guestName || "Guest").trim() || "Guest";
+      const requestQuantity = Math.max(Number(request.quantity ?? 1), 1);
+      const requestCreatedAt = getTimestampMs(request.createdAt);
+
+      if (!orderMap.has(groupKey)) {
+        orderMap.set(groupKey, {
+          groupKey,
+          guestName: normalizedGuestName,
+          orderNumber: request.orderNumber,
+          status,
+          totalQuantity: 0,
+          orderCount: 0,
+          requestIds: [],
+          requests: [],
+          itemMap: new Map(),
+          latestCreatedAt: request.createdAt,
+          queueAgeLevel: group.queueAgeLevel,
+          queueAgeLabel: group.queueAgeLabel,
+        });
+      }
+
+      const existing = orderMap.get(groupKey);
+
+      if (!existing) return;
+
+      if (
+        typeof existing.orderNumber !== "number" &&
+        typeof request.orderNumber === "number"
+      ) {
+        existing.orderNumber = request.orderNumber;
+      }
+
+      existing.requestIds.push(request.id);
+      existing.requests.push(request);
+      existing.totalQuantity += requestQuantity;
+      existing.orderCount += 1;
+
+      const itemKey = request.itemName.trim().toLowerCase();
+      const existingItem = existing.itemMap.get(itemKey);
+
+      if (existingItem) {
+        existingItem.quantity += requestQuantity;
+      } else {
+        existing.itemMap.set(itemKey, {
+          itemName: request.itemName.trim(),
+          quantity: requestQuantity,
+        });
+      }
+
+      const latestCreatedAt = getTimestampMs(existing.latestCreatedAt);
+
+      if (requestCreatedAt >= latestCreatedAt) {
+        existing.latestCreatedAt = request.createdAt;
+      }
+
+      const currentAgePriority =
+        existing.queueAgeLevel === "attention"
+          ? 2
+          : existing.queueAgeLevel === "waiting"
+          ? 1
+          : 0;
+
+      const nextAgePriority =
+        group.queueAgeLevel === "attention"
+          ? 2
+          : group.queueAgeLevel === "waiting"
+          ? 1
+          : 0;
+
+      if (nextAgePriority > currentAgePriority) {
+        existing.queueAgeLevel = group.queueAgeLevel;
+        existing.queueAgeLabel = group.queueAgeLabel;
+      }
+    });
+  });
+
+  return Array.from(orderMap.values())
+    .map((group) => ({
+      groupKey: group.groupKey,
+      guestName: group.guestName,
+      orderNumber: group.orderNumber,
+      status: group.status,
+      totalQuantity: group.totalQuantity,
+      orderCount: group.orderCount,
+      requestIds: group.requestIds,
+      requests: group.requests,
+      itemLines: Array.from(group.itemMap.values()),
+      latestCreatedAt: group.latestCreatedAt,
+      queueAgeLevel: group.queueAgeLevel,
+      queueAgeLabel: group.queueAgeLabel,
+    }))
+    .sort((a, b) => {
+      return getTimestampMs(b.latestCreatedAt) - getTimestampMs(a.latestCreatedAt);
+    });
 }
 
 export default function QueueView({
@@ -84,6 +250,14 @@ export default function QueueView({
 }: Props) {
   const [readySearch, setReadySearch] = useState("");
 
+  const pendingOrders = useMemo(() => {
+    return groupByOrderFromItemGroups(pending, "pending");
+  }, [pending]);
+
+  const preparingOrders = useMemo(() => {
+    return groupByOrderFromItemGroups(preparing, "preparing");
+  }, [preparing]);
+
   const filteredReady = useMemo(() => {
     const query = readySearch.trim();
 
@@ -98,9 +272,9 @@ export default function QueueView({
     });
   }, [ready, readySearch]);
 
-  const renderItemColumn = (
+  const renderOrderColumn = (
     title: string,
-    items: GroupedRequestCard[],
+    items: OrderGroupedCard[],
     type: "pending" | "preparing"
   ) => {
     const isPending = type === "pending";
@@ -130,7 +304,7 @@ export default function QueueView({
 
               {!isPending && hasItems && (
                 <span className="rounded-full border border-[#508CFF]/20 bg-[#508CFF]/10 px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.12em] text-[#9FC0FF]">
-                  Active batch
+                  Active service
                 </span>
               )}
             </div>
@@ -150,9 +324,9 @@ export default function QueueView({
         <div className="flex flex-col gap-3 overflow-y-auto pr-1">
           {items.length === 0 ? (
             <div className="rounded-2xl border border-white/5 bg-[#0F1218] px-4 py-10 text-center">
-              <p className="text-sm font-medium text-white/45">No orders</p>
+              <p className="text-sm font-medium text-white/45">No requests</p>
               <p className="mt-1 text-xs text-white/25">
-                Waiting for activity...
+                Waiting for service activity...
               </p>
             </div>
           ) : (
@@ -160,12 +334,6 @@ export default function QueueView({
               const isUpdating = group.requestIds.some((id) =>
                 updatingIds.includes(id)
               );
-
-              const latestGuests = group.requests
-                .slice(-3)
-                .map((request) => request.guestName || "Guest");
-
-              const extraGuestCount = Math.max(group.requests.length - 3, 0);
 
               const hasQueueAgeBadge =
                 isPending &&
@@ -199,19 +367,12 @@ export default function QueueView({
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <p className="truncate text-lg font-semibold text-white">
-                        {group.itemName}
-                      </p>
-
-                      <div className="mt-2 flex flex-wrap items-center gap-2">
-                        <span className="rounded-full bg-white/6 px-2.5 py-1 text-xs text-white/75">
-                          {group.totalQuantity} total
-                        </span>
-
-                        <span className="rounded-full bg-white/6 px-2.5 py-1 text-xs text-white/75">
-                          {group.orderCount}{" "}
-                          {group.orderCount === 1 ? "order" : "orders"}
-                        </span>
+                      <div className="flex flex-wrap items-center gap-2">
+                        {typeof group.orderNumber === "number" ? (
+                          <span className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[11px] font-semibold tracking-[0.08em] text-white/70">
+                            REQUEST #{group.orderNumber}
+                          </span>
+                        ) : null}
 
                         {hasQueueAgeBadge ? (
                           <span
@@ -223,7 +384,7 @@ export default function QueueView({
 
                         {isUpdating ? (
                           <span className="rounded-full border border-[#8B5CFF]/25 bg-[#8B5CFF]/12 px-2.5 py-1 text-xs font-medium text-[#D7C7FF]">
-                            Batch updating
+                            Service updating
                           </span>
                         ) : null}
 
@@ -233,12 +394,27 @@ export default function QueueView({
                           </span>
                         ) : null}
                       </div>
+
+                      <p className="mt-2 truncate text-lg font-semibold text-white">
+                        {group.guestName}
+                      </p>
+
+                      <div className="mt-2 flex flex-wrap items-center gap-2">
+                        <span className="rounded-full bg-white/6 px-2.5 py-1 text-xs text-white/75">
+                          {group.totalQuantity} total
+                        </span>
+
+                        <span className="rounded-full bg-white/6 px-2.5 py-1 text-xs text-white/75">
+                          {group.orderCount}{" "}
+                          {group.orderCount === 1 ? "item" : "items"}
+                        </span>
+                      </div>
                     </div>
 
                     <span
                       className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-medium capitalize ${badgeMap[type]}`}
                     >
-                      {isPending ? "pending" : "batch"}
+                      {isPending ? "requested" : "in service"}
                     </span>
                   </div>
 
@@ -250,13 +426,25 @@ export default function QueueView({
 
                   <div className="mt-4 rounded-xl border border-white/5 bg-white/[0.03] px-3 py-3">
                     <p className="text-[11px] uppercase tracking-wide text-white/30">
-                      Recent guests
+                      Request items
                     </p>
 
-                    <p className="mt-1 text-sm text-gray-300">
-                      {latestGuests.join(", ")}
-                      {extraGuestCount > 0 ? ` +${extraGuestCount} more` : ""}
-                    </p>
+                    <div className="mt-2 space-y-2">
+                      {group.itemLines.map((item) => (
+                        <div
+                          key={item.itemName}
+                          className="flex items-center justify-between gap-3 text-sm"
+                        >
+                          <span className="truncate text-gray-200">
+                            {item.itemName}
+                          </span>
+
+                          <span className="shrink-0 rounded-full bg-white/10 px-2 py-0.5 text-xs text-white/70">
+                            x{item.quantity}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
                   </div>
 
                   {actionsDisabled && reliabilityMessage ? (
@@ -273,10 +461,10 @@ export default function QueueView({
                         className="w-full rounded-full bg-yellow-500 px-4 py-3 text-sm font-medium text-black transition hover:opacity-90 active:scale-[0.99] disabled:cursor-not-allowed disabled:bg-gray-300 disabled:text-gray-500"
                       >
                         {isUpdating
-                          ? "Starting batch..."
+                          ? "Starting service..."
                           : actionsDisabled
                           ? "Waiting for live sync"
-                          : "Start Batch"}
+                          : "Start"}
                       </button>
                     ) : (
                       <button
@@ -285,10 +473,10 @@ export default function QueueView({
                         className="w-full rounded-full bg-[#508CFF] px-4 py-3 text-sm font-medium text-white transition hover:opacity-90 active:scale-[0.99] disabled:cursor-not-allowed disabled:bg-gray-300 disabled:text-gray-500"
                       >
                         {isUpdating
-                          ? "Marking batch ready..."
+                          ? "Sending for delivery..."
                           : actionsDisabled
                           ? "Waiting for live sync"
-                          : "Batch Ready"}
+                          : "Out for Delivery"}
                       </button>
                     )}
                   </div>
@@ -310,11 +498,13 @@ export default function QueueView({
           <div className="flex items-start justify-between gap-3">
             <div>
               <div className="flex flex-wrap items-center gap-2">
-                <h2 className="text-base font-semibold text-white">Ready</h2>
+                <h2 className="text-base font-semibold text-white">
+                  Out for Delivery
+                </h2>
 
                 {items.length > 0 && (
                   <span className="rounded-full border border-emerald-400/20 bg-emerald-500/10 px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.12em] text-emerald-300">
-                    Pickup view
+                    Delivery view
                   </span>
                 )}
               </div>
@@ -335,7 +525,7 @@ export default function QueueView({
             <input
               type="text"
               inputMode="numeric"
-              placeholder="Find order #"
+              placeholder="Find request #"
               value={readySearch}
               onChange={(e) =>
                 setReadySearch(e.target.value.replace(/\D/g, "").slice(0, 3))
@@ -349,13 +539,15 @@ export default function QueueView({
           {filteredReady.length === 0 ? (
             <div className="rounded-2xl border border-white/5 bg-[#0F1218] px-4 py-10 text-center">
               <p className="text-sm font-medium text-white/45">
-                {readySearch ? "No matching ready orders" : "Nothing ready yet"}
+                {readySearch
+                  ? "No matching deliveries"
+                  : "Nothing out for delivery yet"}
               </p>
 
               <p className="mt-1 text-xs text-white/25">
                 {readySearch
-                  ? "Try the 3-digit order number."
-                  : "Ready items appear grouped by guest."}
+                  ? "Try the 3-digit request number."
+                  : "Delivery items appear grouped by guest."}
               </p>
             </div>
           ) : (
@@ -389,7 +581,7 @@ export default function QueueView({
                     <div className="min-w-0">
                       {typeof orderNumber === "number" && (
                         <span className="rounded-full border border-emerald-400/20 bg-emerald-500/10 px-2.5 py-1 text-[11px] font-semibold tracking-[0.08em] text-emerald-200">
-                          ORDER #{orderNumber}
+                          REQUEST #{orderNumber}
                         </span>
                       )}
 
@@ -399,17 +591,17 @@ export default function QueueView({
 
                       <div className="mt-2 flex flex-wrap items-center gap-2">
                         <span className="rounded-full bg-white/6 px-2.5 py-1 text-xs text-white/75">
-                          {group.totalQuantity} ready
+                          {group.totalQuantity} out for delivery
                         </span>
 
                         <span className="rounded-full bg-white/6 px-2.5 py-1 text-xs text-white/75">
                           {group.orderCount}{" "}
-                          {group.orderCount === 1 ? "order" : "orders"}
+                          {group.orderCount === 1 ? "request" : "requests"}
                         </span>
 
                         {isUpdating ? (
                           <span className="rounded-full border border-[#8B5CFF]/25 bg-[#8B5CFF]/12 px-2.5 py-1 text-xs font-medium text-[#D7C7FF]">
-                            Completing pickup
+                            Marking delivered
                           </span>
                         ) : null}
 
@@ -422,7 +614,7 @@ export default function QueueView({
                     </div>
 
                     <span className="shrink-0 rounded-full border border-emerald-400/20 bg-emerald-500/15 px-2.5 py-1 text-xs font-medium text-emerald-300">
-                      Ready Now
+                      Out for Delivery
                     </span>
                   </div>
 
@@ -434,7 +626,7 @@ export default function QueueView({
 
                   <div className="mt-4 rounded-xl border border-white/5 bg-white/[0.03] px-3 py-3">
                     <p className="text-[11px] uppercase tracking-wide text-white/30">
-                      Pickup items
+                      Delivery items
                     </p>
 
                     <div className="mt-2 space-y-2">
@@ -468,10 +660,10 @@ export default function QueueView({
                       className="w-full rounded-full bg-emerald-400 px-4 py-3 text-sm font-medium text-black transition hover:opacity-90 active:scale-[0.99] disabled:cursor-not-allowed disabled:bg-gray-300 disabled:text-gray-500"
                     >
                       {isUpdating
-                        ? "Completing pickup..."
+                        ? "Marking delivered..."
                         : actionsDisabled
                         ? "Waiting for live sync"
-                        : "Complete Pickup"}
+                        : "Mark Delivered"}
                     </button>
                   </div>
                 </div>
@@ -489,9 +681,9 @@ export default function QueueView({
   if (isEmpty) {
     return (
       <div className="rounded-3xl border border-white/8 bg-[#191C24] px-6 py-16 text-center">
-        <p className="text-base font-medium text-white/55">No orders yet</p>
+        <p className="text-base font-medium text-white/55">No requests yet</p>
         <p className="mt-2 text-sm text-white/30">
-          Waiting for guests to begin ordering.
+          Waiting for guests to send service requests.
         </p>
       </div>
     );
@@ -499,8 +691,8 @@ export default function QueueView({
 
   return (
     <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-      {renderItemColumn("Pending", pending, "pending")}
-      {renderItemColumn("Preparing", preparing, "preparing")}
+      {renderOrderColumn("Incoming Requests", pendingOrders, "pending")}
+      {renderOrderColumn("In Service", preparingOrders, "preparing")}
       {renderReadyColumn(filteredReady)}
     </div>
   );
