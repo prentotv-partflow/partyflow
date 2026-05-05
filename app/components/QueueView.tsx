@@ -21,6 +21,7 @@ type OrderGroupedCard = {
   groupKey: string;
   guestName: string;
   orderNumber?: number;
+  sectionId: string;
   status: "pending" | "preparing";
   totalQuantity: number;
   orderCount: number;
@@ -59,11 +60,13 @@ const columnShellMap: Record<ColumnType, string> = {
   ready: "border-emerald-400/10",
 };
 
-function getTimestampMs(value?: {
-  seconds?: number;
-  nanoseconds?: number;
-  toMillis?: () => number;
-} | null) {
+function getTimestampMs(
+  value?: {
+    seconds?: number;
+    nanoseconds?: number;
+    toMillis?: () => number;
+  } | null
+) {
   if (!value) return 0;
 
   if (typeof value.toMillis === "function") {
@@ -109,6 +112,30 @@ function getPrimaryOrderNumber(requests: { orderNumber?: number }[]) {
   return found?.orderNumber;
 }
 
+function getPrimarySectionId(requests: { sectionId?: string }[]) {
+  const found = requests.find((request) => request.sectionId?.trim());
+
+  return found?.sectionId?.trim() || "main";
+}
+
+function formatSectionLabel(sectionId: string) {
+  return sectionId
+    .split(/[-_\s]+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+    .join(" ");
+}
+
+function getRequestMetaLabel(orderNumber: number | undefined, sectionId: string) {
+  const sectionLabel = formatSectionLabel(sectionId);
+
+  if (typeof orderNumber === "number") {
+    return `#${orderNumber} · ${sectionLabel}`;
+  }
+
+  return sectionLabel;
+}
+
 function groupByOrderFromItemGroups(
   groups: GroupedRequestCard[],
   status: "pending" | "preparing"
@@ -119,6 +146,7 @@ function groupByOrderFromItemGroups(
       groupKey: string;
       guestName: string;
       orderNumber?: number;
+      sectionId: string;
       status: "pending" | "preparing";
       totalQuantity: number;
       orderCount: number;
@@ -150,6 +178,7 @@ function groupByOrderFromItemGroups(
           groupKey,
           guestName: normalizedGuestName,
           orderNumber: request.orderNumber,
+          sectionId: request.sectionId?.trim() || "main",
           status,
           totalQuantity: 0,
           orderCount: 0,
@@ -171,6 +200,10 @@ function groupByOrderFromItemGroups(
         typeof request.orderNumber === "number"
       ) {
         existing.orderNumber = request.orderNumber;
+      }
+
+      if (existing.sectionId === "main" && request.sectionId?.trim()) {
+        existing.sectionId = request.sectionId.trim();
       }
 
       existing.requestIds.push(request.id);
@@ -222,6 +255,7 @@ function groupByOrderFromItemGroups(
       groupKey: group.groupKey,
       guestName: group.guestName,
       orderNumber: group.orderNumber,
+      sectionId: group.sectionId,
       status: group.status,
       totalQuantity: group.totalQuantity,
       orderCount: group.orderCount,
@@ -359,6 +393,10 @@ export default function QueueView({
                 : "border-white/6";
 
               const buttonDisabled = isUpdating || actionsDisabled;
+              const metaLabel = getRequestMetaLabel(
+                group.orderNumber,
+                group.sectionId
+              );
 
               return (
                 <div
@@ -368,11 +406,9 @@ export default function QueueView({
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
-                        {typeof group.orderNumber === "number" ? (
-                          <span className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[11px] font-semibold tracking-[0.08em] text-white/70">
-                            REQUEST #{group.orderNumber}
-                          </span>
-                        ) : null}
+                        <span className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[11px] font-semibold tracking-[0.08em] text-white/72">
+                          {metaLabel}
+                        </span>
 
                         {hasQueueAgeBadge ? (
                           <span
@@ -384,37 +420,26 @@ export default function QueueView({
 
                         {isUpdating ? (
                           <span className="rounded-full border border-[#8B5CFF]/25 bg-[#8B5CFF]/12 px-2.5 py-1 text-xs font-medium text-[#D7C7FF]">
-                            Service updating
+                            Updating
                           </span>
                         ) : null}
 
                         {actionsDisabled ? (
                           <span className="rounded-full border border-yellow-400/20 bg-yellow-500/10 px-2.5 py-1 text-xs font-medium text-yellow-300">
-                            Actions paused
+                            Paused
                           </span>
                         ) : null}
                       </div>
 
-                      <p className="mt-2 truncate text-lg font-semibold text-white">
+                      <p className="mt-3 truncate text-xl font-semibold leading-tight text-white">
                         {group.guestName}
                       </p>
-
-                      <div className="mt-2 flex flex-wrap items-center gap-2">
-                        <span className="rounded-full bg-white/6 px-2.5 py-1 text-xs text-white/75">
-                          {group.totalQuantity} total
-                        </span>
-
-                        <span className="rounded-full bg-white/6 px-2.5 py-1 text-xs text-white/75">
-                          {group.orderCount}{" "}
-                          {group.orderCount === 1 ? "item" : "items"}
-                        </span>
-                      </div>
                     </div>
 
                     <span
                       className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-medium capitalize ${badgeMap[type]}`}
                     >
-                      {isPending ? "requested" : "in service"}
+                      {isPending ? "Requested" : "In Service"}
                     </span>
                   </div>
 
@@ -424,27 +449,21 @@ export default function QueueView({
                     />
                   </div>
 
-                  <div className="mt-4 rounded-xl border border-white/5 bg-white/[0.03] px-3 py-3">
-                    <p className="text-[11px] uppercase tracking-wide text-white/30">
-                      Request items
-                    </p>
+                  <div className="mt-4 space-y-2 rounded-xl border border-white/5 bg-white/[0.03] px-3 py-3">
+                    {group.itemLines.map((item) => (
+                      <div
+                        key={item.itemName}
+                        className="flex items-center justify-between gap-3 text-sm"
+                      >
+                        <span className="truncate text-gray-100">
+                          {item.itemName}
+                        </span>
 
-                    <div className="mt-2 space-y-2">
-                      {group.itemLines.map((item) => (
-                        <div
-                          key={item.itemName}
-                          className="flex items-center justify-between gap-3 text-sm"
-                        >
-                          <span className="truncate text-gray-200">
-                            {item.itemName}
-                          </span>
-
-                          <span className="shrink-0 rounded-full bg-white/10 px-2 py-0.5 text-xs text-white/70">
-                            x{item.quantity}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
+                        <span className="shrink-0 rounded-full bg-white/10 px-2 py-0.5 text-xs font-medium text-white/75">
+                          x{item.quantity}
+                        </span>
+                      </div>
+                    ))}
                   </div>
 
                   {actionsDisabled && reliabilityMessage ? (
@@ -461,7 +480,7 @@ export default function QueueView({
                         className="w-full rounded-full bg-yellow-500 px-4 py-3 text-sm font-medium text-black transition hover:opacity-90 active:scale-[0.99] disabled:cursor-not-allowed disabled:bg-gray-300 disabled:text-gray-500"
                       >
                         {isUpdating
-                          ? "Starting service..."
+                          ? "Starting..."
                           : actionsDisabled
                           ? "Waiting for live sync"
                           : "Start"}
@@ -473,7 +492,7 @@ export default function QueueView({
                         className="w-full rounded-full bg-[#508CFF] px-4 py-3 text-sm font-medium text-white transition hover:opacity-90 active:scale-[0.99] disabled:cursor-not-allowed disabled:bg-gray-300 disabled:text-gray-500"
                       >
                         {isUpdating
-                          ? "Sending for delivery..."
+                          ? "Sending..."
                           : actionsDisabled
                           ? "Waiting for live sync"
                           : "Out for Delivery"}
@@ -566,6 +585,8 @@ export default function QueueView({
 
               const itemEntries = Object.entries(uniqueItemLines);
               const orderNumber = getPrimaryOrderNumber(group.requests);
+              const sectionId = getPrimarySectionId(group.requests);
+              const metaLabel = getRequestMetaLabel(orderNumber, sectionId);
               const buttonDisabled = isUpdating || actionsDisabled;
 
               return (
@@ -579,42 +600,31 @@ export default function QueueView({
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
-                      {typeof orderNumber === "number" && (
+                      <div className="flex flex-wrap items-center gap-2">
                         <span className="rounded-full border border-emerald-400/20 bg-emerald-500/10 px-2.5 py-1 text-[11px] font-semibold tracking-[0.08em] text-emerald-200">
-                          REQUEST #{orderNumber}
-                        </span>
-                      )}
-
-                      <p className="mt-2 truncate text-lg font-semibold text-white">
-                        {group.guestName}
-                      </p>
-
-                      <div className="mt-2 flex flex-wrap items-center gap-2">
-                        <span className="rounded-full bg-white/6 px-2.5 py-1 text-xs text-white/75">
-                          {group.totalQuantity} out for delivery
-                        </span>
-
-                        <span className="rounded-full bg-white/6 px-2.5 py-1 text-xs text-white/75">
-                          {group.orderCount}{" "}
-                          {group.orderCount === 1 ? "request" : "requests"}
+                          {metaLabel}
                         </span>
 
                         {isUpdating ? (
                           <span className="rounded-full border border-[#8B5CFF]/25 bg-[#8B5CFF]/12 px-2.5 py-1 text-xs font-medium text-[#D7C7FF]">
-                            Marking delivered
+                            Updating
                           </span>
                         ) : null}
 
                         {actionsDisabled ? (
                           <span className="rounded-full border border-yellow-400/20 bg-yellow-500/10 px-2.5 py-1 text-xs font-medium text-yellow-300">
-                            Actions paused
+                            Paused
                           </span>
                         ) : null}
                       </div>
+
+                      <p className="mt-3 truncate text-xl font-semibold leading-tight text-white">
+                        {group.guestName}
+                      </p>
                     </div>
 
                     <span className="shrink-0 rounded-full border border-emerald-400/20 bg-emerald-500/15 px-2.5 py-1 text-xs font-medium text-emerald-300">
-                      Out for Delivery
+                      Out
                     </span>
                   </div>
 
@@ -624,27 +634,21 @@ export default function QueueView({
                     />
                   </div>
 
-                  <div className="mt-4 rounded-xl border border-white/5 bg-white/[0.03] px-3 py-3">
-                    <p className="text-[11px] uppercase tracking-wide text-white/30">
-                      Delivery items
-                    </p>
+                  <div className="mt-4 space-y-2 rounded-xl border border-white/5 bg-white/[0.03] px-3 py-3">
+                    {itemEntries.map(([itemName, quantity]) => (
+                      <div
+                        key={itemName}
+                        className="flex items-center justify-between gap-3 text-sm"
+                      >
+                        <span className="truncate text-gray-100">
+                          {itemName}
+                        </span>
 
-                    <div className="mt-2 space-y-2">
-                      {itemEntries.map(([itemName, quantity]) => (
-                        <div
-                          key={itemName}
-                          className="flex items-center justify-between gap-3 text-sm"
-                        >
-                          <span className="truncate text-gray-200">
-                            {itemName}
-                          </span>
-
-                          <span className="shrink-0 rounded-full bg-white/10 px-2 py-0.5 text-xs text-white/70">
-                            x{quantity}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
+                        <span className="shrink-0 rounded-full bg-white/10 px-2 py-0.5 text-xs font-medium text-white/75">
+                          x{quantity}
+                        </span>
+                      </div>
+                    ))}
                   </div>
 
                   {actionsDisabled && reliabilityMessage ? (
@@ -660,7 +664,7 @@ export default function QueueView({
                       className="w-full rounded-full bg-emerald-400 px-4 py-3 text-sm font-medium text-black transition hover:opacity-90 active:scale-[0.99] disabled:cursor-not-allowed disabled:bg-gray-300 disabled:text-gray-500"
                     >
                       {isUpdating
-                        ? "Marking delivered..."
+                        ? "Marking..."
                         : actionsDisabled
                         ? "Waiting for live sync"
                         : "Mark Delivered"}

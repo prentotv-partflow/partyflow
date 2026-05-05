@@ -23,6 +23,7 @@ export type Request = {
   itemName: string;
   quantity: number;
   status: Status;
+  sectionId?: string;
   orderNumber?: number;
   orderGroupId?: string;
   createdAt?: FirestoreTimestampLike;
@@ -42,7 +43,6 @@ export type GroupedRequestCard = {
   requests: Request[];
   latestCreatedAt?: FirestoreTimestampLike;
 
-  // Queue aging metadata for pending host groups
   queueAgeMinutes?: number;
   queueAgeLevel?: QueueAgeLevel;
   queueAgeLabel?: string;

@@ -25,16 +25,17 @@ export default function HostNav({
   };
 
   return (
-    <div className="rounded-3xl border border-white/6 bg-[#0E121B]/92 px-4 py-4 shadow-[0_10px_30px_rgba(0,0,0,0.18)] backdrop-blur-xl sm:px-5">
+    <div className="px-1 py-1 sm:px-0">
+      {/* Header */}
       <div className="flex items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-3">
           <div className="shrink-0 rounded-2xl border border-white/8 bg-white/[0.03] p-2.5">
             <Image
               src="/branding/partyflow-logo-interface.png"
               alt="PartyFlow logo"
-              width={34}
-              height={34}
-              className="h-[34px] w-[34px] object-contain"
+              width={42}
+              height={42}
+              className="h-[42px] w-[42px] object-contain"
               priority
             />
           </div>
@@ -50,13 +51,14 @@ export default function HostNav({
         </div>
       </div>
 
-      <div className="mt-4 rounded-2xl border border-white/5 bg-white/[0.03] p-1.5">
-        <div className="flex flex-wrap gap-2">
+      {/* Tabs (tightened + softly anchored) */}
+      <div className="mt-3">
+        <div className="inline-flex flex-wrap gap-2 rounded-2xl bg-white/[0.03] p-1">
           <button
             onClick={() => handleTabChange("queue")}
             className={`rounded-full px-4 py-2 text-sm font-medium transition ${
               activeTab === "queue"
-                ? "bg-white text-black shadow-sm"
+                ? "bg-white text-black shadow-[0_0_0_1px_rgba(255,255,255,0.08)]"
                 : "bg-white/5 text-white hover:bg-white/10"
             }`}
           >
@@ -67,7 +69,7 @@ export default function HostNav({
             onClick={() => handleTabChange("menu")}
             className={`rounded-full px-4 py-2 text-sm font-medium transition ${
               activeTab === "menu"
-                ? "bg-white text-black shadow-sm"
+                ? "bg-white text-black shadow-[0_0_0_1px_rgba(255,255,255,0.08)]"
                 : "bg-white/5 text-white hover:bg-white/10"
             }`}
           >

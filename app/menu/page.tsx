@@ -4,7 +4,7 @@ import Image from "next/image";
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { db } from "../firebase";
-import { getGuestSession } from "../lib/guestSession";
+import { getGuestSession, setGuestSession } from "../lib/guestSession";
 import { formatCurrency } from "../lib/formatCurrency";
 import type { GuestSession } from "../types/session";
 import {
@@ -36,6 +36,7 @@ type RequestItem = {
   quantity: number;
   status: RequestStatus;
   guestId: string;
+  sectionId?: string;
   orderNumber?: number;
   orderGroupId?: string;
   createdAt?: FirestoreTimestampLike;
@@ -265,6 +266,7 @@ function MenuContent() {
   const router = useRouter();
 
   const eventId = searchParams.get("event");
+  const sectionFromUrl = searchParams.get("section")?.trim() || null;
 
   const [session, setSessionState] = useState<GuestSession | null>(null);
   const [menu, setMenu] = useState<MenuItem[]>([]);
@@ -304,13 +306,26 @@ function MenuContent() {
     const existing = getGuestSession();
 
     if (existing && existing.eventId === eventId) {
-      setSessionState(existing);
+      const resolvedSectionId =
+        sectionFromUrl || existing.sectionId?.trim() || "main";
+
+      const nextSession: GuestSession = {
+        ...existing,
+        sectionId: resolvedSectionId,
+      };
+
+      setGuestSession(nextSession);
+      setSessionState(nextSession);
       setChecking(false);
       return;
     }
 
-    router.replace(`/event?event=${eventId}`);
-  }, [eventId, router]);
+    const sectionQuery = sectionFromUrl
+      ? `&section=${encodeURIComponent(sectionFromUrl)}`
+      : "";
+
+    router.replace(`/event?event=${encodeURIComponent(eventId)}${sectionQuery}`);
+  }, [eventId, router, sectionFromUrl]);
 
   useEffect(() => {
     if (!session) return;
@@ -455,6 +470,7 @@ function MenuContent() {
             quantity: request.quantity,
             status: getEffectiveRequestStatus(request),
             guestId: request.guestId,
+            sectionId: request.sectionId,
             orderNumber: request.orderNumber,
             orderGroupId: request.orderGroupId,
           }))
@@ -734,6 +750,7 @@ function MenuContent() {
 
         const nextOrderNumber = orderNumber >= 999 ? 101 : orderNumber + 1;
         const orderGroupId = `${session.eventId}_${orderNumber}_${Date.now()}`;
+        const sectionId = session.sectionId?.trim() || "main";
         const requestCollectionRef = collection(
           db,
           "events",
@@ -760,6 +777,7 @@ function MenuContent() {
             eventId: session.eventId,
             guestId: session.guestId,
             guestName: session.guestName,
+            sectionId,
             menuItemId: item.itemId,
             itemName: item.itemName,
             quantity: item.quantity,

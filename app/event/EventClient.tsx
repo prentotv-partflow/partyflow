@@ -10,6 +10,7 @@ export default function EventClient() {
   const router = useRouter();
 
   const eventId = searchParams.get("event");
+  const sectionId = searchParams.get("section")?.trim() || "main";
 
   const [name, setName] = useState("");
 
@@ -31,11 +32,16 @@ export default function EventClient() {
       eventId,
       guestId: crypto.randomUUID(),
       guestName: trimmedName,
+      sectionId,
     };
 
     setGuestSession(session);
 
-    router.replace(`/menu?event=${eventId}`);
+    router.replace(
+      `/menu?event=${encodeURIComponent(eventId)}&section=${encodeURIComponent(
+        sectionId
+      )}`
+    );
   };
 
   return (
