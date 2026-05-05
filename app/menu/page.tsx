@@ -141,7 +141,7 @@ function getStatusNote(status: RequestStatus, orderNumber?: number) {
     case "preparing":
       return "Your items are being prepared.";
     case "ready":
-      return `Out for delivery. Settle with the attendant or bar and give${orderText}.`;
+      return `Out for delivery. Settle with the attendant and give${orderText}.`;
     case "completed":
       return `Delivery complete for${orderText}.`;
     default:
@@ -809,6 +809,84 @@ function MenuContent() {
     });
   }, [requests]);
 
+  const groupedRequests = useMemo(() => {
+    const groups: Record<
+      string,
+      {
+        id: string;
+        orderNumber?: number;
+        items: Record<string, { itemName: string; quantity: number }>;
+        status: RequestStatus;
+        sortTime: number;
+        isRecent: boolean;
+        isStatusHighlighted: boolean;
+      }
+    > = {};
+
+    sortedRequests.forEach((req) => {
+      const groupId = req.orderGroupId || req.id;
+      const effectiveStatus = getEffectiveRequestStatus(req);
+      const lifecycleTime = getLifecycleSortTime(req);
+
+      if (!groups[groupId]) {
+        groups[groupId] = {
+          id: groupId,
+          orderNumber: req.orderNumber,
+          items: {},
+          status: effectiveStatus,
+          sortTime: lifecycleTime,
+          isRecent: false,
+          isStatusHighlighted: false,
+        };
+      }
+
+      if (
+        typeof groups[groupId].orderNumber !== "number" &&
+        typeof req.orderNumber === "number"
+      ) {
+        groups[groupId].orderNumber = req.orderNumber;
+      }
+
+      const itemKey = req.itemName.trim().toLowerCase();
+
+      if (!groups[groupId].items[itemKey]) {
+        groups[groupId].items[itemKey] = {
+          itemName: req.itemName,
+          quantity: 0,
+        };
+      }
+
+      groups[groupId].items[itemKey].quantity += req.quantity;
+
+      if (
+        getStatusPriority(effectiveStatus) < getStatusPriority(groups[groupId].status)
+      ) {
+        groups[groupId].status = effectiveStatus;
+      }
+
+      if (lifecycleTime > groups[groupId].sortTime) {
+        groups[groupId].sortTime = lifecycleTime;
+      }
+
+      if (recentRequestIds.includes(req.id)) {
+        groups[groupId].isRecent = true;
+      }
+
+      if (highlightedStatusId === req.id) {
+        groups[groupId].isStatusHighlighted = true;
+      }
+    });
+
+    return Object.values(groups).sort((a, b) => {
+      const priorityDiff =
+        getStatusPriority(a.status) - getStatusPriority(b.status);
+
+      if (priorityDiff !== 0) return priorityDiff;
+
+      return b.sortTime - a.sortTime;
+    });
+  }, [highlightedStatusId, recentRequestIds, sortedRequests]);
+
   const filteredMenu = useMemo(() => {
     const query = menuSearch.trim().toLowerCase();
 
@@ -900,6 +978,11 @@ function MenuContent() {
   const handleViewRequests = () => {
     scrollToActivitySection();
   };
+
+  const quickRequestFeedback =
+    lastReorderMenuItem ? addFeedbackMap[lastReorderMenuItem.id] ?? "idle" : "idle";
+
+  const quickRequestActive = quickRequestFeedback !== "idle";
 
   if (checking || !session) {
     return (
@@ -1053,7 +1136,11 @@ function MenuContent() {
               {lastReorderMenuItem ? (
                 <button
                   onClick={handleReorderLastItem}
-                  className="flex w-full items-center justify-between gap-3 rounded-2xl border border-[#8B5CFF]/20 bg-[#8B5CFF]/10 px-4 py-3 text-left transition hover:border-[#B8A6FF]/30 hover:bg-[#8B5CFF]/16"
+                  className={`flex w-full items-center justify-between gap-3 rounded-2xl border px-4 py-3 text-left transition-all duration-150 ease-out active:scale-[0.98] ${
+                    quickRequestActive
+                      ? "scale-[1.01] border-[#B8A6FF]/45 bg-[#8B5CFF]/18 shadow-[0_0_0_1px_rgba(184,166,255,0.16),0_0_24px_rgba(139,92,255,0.18)]"
+                      : "border-[#8B5CFF]/25 bg-[#8B5CFF]/10 shadow-[0_0_0_1px_rgba(139,92,255,0.08),0_0_20px_rgba(139,92,255,0.10)] hover:border-[#B8A6FF]/35 hover:bg-[#8B5CFF]/16"
+                  }`}
                 >
                   <div className="min-w-0">
                     <p className="text-[10px] uppercase tracking-[0.16em] text-[#B8A6FF]">
@@ -1064,8 +1151,14 @@ function MenuContent() {
                     </p>
                   </div>
 
-                  <span className="shrink-0 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-[#E9E0FF]">
-                    + Add
+                  <span
+                    className={`shrink-0 rounded-full border px-3 py-1.5 text-xs font-medium transition-all duration-150 ease-out active:scale-[0.96] ${
+                      quickRequestActive
+                        ? "scale-[1.04] border-[#B8A6FF]/45 bg-[#8B5CFF]/45 text-white shadow-[0_0_16px_rgba(139,92,255,0.22)]"
+                        : "border-[#8B5CFF]/40 bg-[#8B5CFF]/20 text-[#E9E0FF] hover:border-[#B8A6FF]/40 hover:bg-[#8B5CFF]/35"
+                    }`}
+                  >
+                    {quickRequestActive ? "✓ Added" : "+ Add"}
                   </span>
                 </button>
               ) : null}
@@ -1076,7 +1169,7 @@ function MenuContent() {
                     htmlFor="menu-search"
                     className="text-[10px] uppercase tracking-[0.16em] text-white/35"
                   >
-                    Search VIP menu
+                    Search Menu
                   </label>
                   <input
                     id="menu-search"
@@ -1223,13 +1316,13 @@ function MenuContent() {
                 </div>
 
                 <span className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-xs text-white/70">
-                  {sortedRequests.length}
+                  {groupedRequests.length}
                 </span>
               </div>
             </div>
 
             <div className="p-4">
-              {sortedRequests.length === 0 ? (
+              {groupedRequests.length === 0 ? (
                 <div className="rounded-2xl border border-white/5 bg-[#101522] px-4 py-10 text-center">
                   <p className="text-sm font-medium text-white/50">
                     No requests yet
@@ -1240,24 +1333,22 @@ function MenuContent() {
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {sortedRequests.map((req) => {
-                    const effectiveStatus = getEffectiveRequestStatus(req);
+                  {groupedRequests.map((group) => {
+                    const effectiveStatus = group.status;
                     const isReady = effectiveStatus === "ready";
                     const isCompleted = effectiveStatus === "completed";
-                    const isRecent = recentRequestIds.includes(req.id);
-                    const isStatusHighlighted = highlightedStatusId === req.id;
 
                     const cardClass = isReady
                       ? "border-emerald-400/22 bg-emerald-500/10"
                       : isCompleted
                       ? "border-white/10 bg-white/5"
-                      : isRecent || isStatusHighlighted
+                      : group.isRecent || group.isStatusHighlighted
                       ? "border-[#8B5CFF]/28 bg-[#8B5CFF]/8"
                       : "border-white/6 bg-[#101522]";
 
                     return (
                       <div
-                        key={req.id}
+                        key={group.id}
                         className={`rounded-2xl border p-4 transition-all duration-300 ${cardClass}`}
                       >
                         <div className="flex items-start gap-3">
@@ -1271,26 +1362,29 @@ function MenuContent() {
                             <div className="flex items-start justify-between gap-3">
                               <div className="min-w-0">
                                 <div className="flex flex-wrap items-center gap-2">
-                                  {typeof req.orderNumber === "number" ? (
+                                  {typeof group.orderNumber === "number" ? (
                                     <span className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.12em] text-white/60">
-                                      Request #{req.orderNumber}
+                                      Request #{group.orderNumber}
                                     </span>
                                   ) : null}
 
-                                  {isRecent ? (
+                                  {group.isRecent ? (
                                     <span className="rounded-full border border-[#8B5CFF]/25 bg-[#8B5CFF]/12 px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.12em] text-[#D7C7FF]">
                                       New
                                     </span>
                                   ) : null}
                                 </div>
 
-                                <p className="mt-2 truncate text-sm font-semibold text-white">
-                                  {req.itemName}
-                                </p>
-
-                                <p className="mt-1 text-xs text-white/45">
-                                  Quantity: {req.quantity}
-                                </p>
+                                <div className="mt-2 space-y-1.5">
+                                  {Object.values(group.items).map((item) => (
+                                    <p
+                                      key={item.itemName}
+                                      className="text-sm font-semibold text-white"
+                                    >
+                                      {item.itemName} x{item.quantity}
+                                    </p>
+                                  ))}
+                                </div>
                               </div>
 
                               <span
@@ -1311,7 +1405,7 @@ function MenuContent() {
                                   : "text-white/48"
                               }`}
                             >
-                              {getStatusNote(effectiveStatus, req.orderNumber)}
+                              {getStatusNote(effectiveStatus, group.orderNumber)}
                             </p>
                           </div>
                         </div>
