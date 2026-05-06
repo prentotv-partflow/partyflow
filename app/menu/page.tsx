@@ -1300,7 +1300,7 @@ function MenuContent() {
                     id="menu-search"
                     value={menuSearch}
                     onChange={(event) => setMenuSearch(event.target.value)}
-                    placeholder="Search bottles, mixers, ice, or items"
+                    placeholder="Type to begin search"
                     className="mt-2 w-full bg-transparent text-sm text-white outline-none placeholder:text-white/25"
                   />
                 </div>

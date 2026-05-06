@@ -46,6 +46,12 @@ type RequestWithInventory = Omit<Request, "status"> & {
   unavailableAt?: FirestoreTimestampLike;
 };
 
+type MenuInventoryItem = {
+  id: string;
+  name?: string;
+  qty?: number;
+};
+
 function getQueueCacheKey(eventId: string) {
   return `partyflow_host_queue_snapshot_${eventId}`;
 }
@@ -371,6 +377,7 @@ export default function QueueTab() {
   const eventId = searchParams.get("event");
 
   const [requests, setRequests] = useState<Request[]>([]);
+  const [menuInventory, setMenuInventory] = useState<MenuInventoryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [updatingIds, setUpdatingIds] = useState<string[]>([]);
   const [toast, setToast] = useState<ToastState>(null);
@@ -454,6 +461,33 @@ export default function QueueTab() {
   }, [eventId]);
 
   useEffect(() => {
+    if (!eventId) {
+      setMenuInventory([]);
+      return;
+    }
+
+    const menuRef = collection(db, "events", eventId, "menu");
+
+    const unsubscribe = onSnapshot(
+      menuRef,
+      (snapshot) => {
+        const items: MenuInventoryItem[] = snapshot.docs.map((snapshotDoc) => ({
+          id: snapshotDoc.id,
+          ...(snapshotDoc.data() as Omit<MenuInventoryItem, "id">),
+        }));
+
+        setMenuInventory(items);
+      },
+      (error) => {
+        console.error("Menu inventory listener error:", error);
+        setMenuInventory([]);
+      }
+    );
+
+    return () => unsubscribe();
+  }, [eventId]);
+
+  useEffect(() => {
     if (!toast) return;
 
     const timeout = setTimeout(() => {
@@ -499,6 +533,31 @@ export default function QueueTab() {
   const mostRequestedItemLabel = useMemo(() => {
     return getMostRequestedItemLabel(requests);
   }, [requests]);
+
+  const menuQtyById = useMemo(() => {
+    const map = new Map<string, number>();
+
+    menuInventory.forEach((item) => {
+      map.set(item.id, Number(item.qty ?? 0));
+    });
+
+    return map;
+  }, [menuInventory]);
+
+  const unavailableEligibleRequestIds = useMemo(() => {
+    return pendingRequests
+      .filter((request) => {
+        const menuItemId = getMenuItemIdFromRequest(
+          request as RequestWithInventory
+        );
+
+        if (!menuItemId) return false;
+
+        const currentQty = menuQtyById.get(menuItemId);
+        return typeof currentQty === "number" && currentQty <= 0;
+      })
+      .map((request) => request.id);
+  }, [menuQtyById, pendingRequests]);
 
   const pendingGroups = useMemo(
     () => groupRequestsByItem(pendingRequests, "pending", nowMs),
@@ -761,28 +820,118 @@ export default function QueueTab() {
     try {
       setUpdatingIds((prev) => [...prev, ...idsToUpdate]);
 
-      await Promise.all(
-        idsToUpdate.map((requestId) => {
-          const requestRef = doc(db, "events", eventId, "requests", requestId);
+      const markedCount = await runTransaction(db, async (transaction) => {
+        const requestRefs = idsToUpdate.map((requestId) =>
+          doc(db, "events", eventId, "requests", requestId)
+        );
 
-          return updateDoc(requestRef, {
+        const requestSnapshots = await Promise.all(
+          requestRefs.map((requestRef) => transaction.get(requestRef))
+        );
+
+        const eligibleRequests: {
+          requestRef: (typeof requestRefs)[number];
+          menuItemId: string;
+          itemName: string;
+        }[] = [];
+
+        const menuItemIds = new Set<string>();
+
+        requestSnapshots.forEach((requestSnap, index) => {
+          if (!requestSnap.exists()) {
+            throw new Error("Request not found.");
+          }
+
+          const requestData = requestSnap.data() as RequestWithInventory;
+          const effectiveStatus = getEffectiveStatus(requestData);
+
+          if (effectiveStatus !== "pending") {
+            return;
+          }
+
+          const menuItemId = getMenuItemIdFromRequest(requestData);
+          const itemName = requestData.itemName || "Item";
+
+          if (!menuItemId) {
+            throw new Error(
+              `${itemName} is missing menuItemId. Cannot verify inventory state.`
+            );
+          }
+
+          eligibleRequests.push({
+            requestRef: requestRefs[index],
+            menuItemId,
+            itemName,
+          });
+
+          menuItemIds.add(menuItemId);
+        });
+
+        if (eligibleRequests.length === 0) {
+          return 0;
+        }
+
+        const menuRefs = Array.from(menuItemIds).map((menuItemId) =>
+          doc(db, "events", eventId, "menu", menuItemId)
+        );
+
+        const menuSnapshots = await Promise.all(
+          menuRefs.map((menuRef) => transaction.get(menuRef))
+        );
+
+        const outOfStockMenuIds = new Set<string>();
+
+        menuSnapshots.forEach((menuSnap, index) => {
+          if (!menuSnap.exists()) {
+            throw new Error("Menu item not found.");
+          }
+
+          const menuRef = menuRefs[index];
+          const menuData = menuSnap.data() as { qty?: number };
+          const currentQty = Number(menuData.qty ?? 0);
+
+          if (currentQty <= 0) {
+            outOfStockMenuIds.add(menuRef.id);
+          }
+        });
+
+        const canMarkUnavailable = eligibleRequests.some((request) =>
+          outOfStockMenuIds.has(request.menuItemId)
+        );
+
+        if (!canMarkUnavailable) {
+          throw new Error(
+            "Unavailable is locked. At least one item must be out of stock."
+          );
+        }
+
+        eligibleRequests.forEach(({ requestRef }) => {
+          transaction.update(requestRef, {
             status: "unavailable",
             unavailableAt: serverTimestamp(),
           });
-        })
-      );
+        });
+
+        return eligibleRequests.length;
+      });
 
       setToast({
-        message: `${idsToUpdate.length} item${
-          idsToUpdate.length === 1 ? "" : "s"
-        } marked unavailable`,
+        message:
+          markedCount === 0
+            ? "No pending items to mark unavailable"
+            : `${markedCount} item${
+                markedCount === 1 ? "" : "s"
+              } marked unavailable`,
         type: "success",
       });
     } catch (error) {
       console.error("Failed to mark unavailable:", error);
 
       setToast({
-        message: "Failed to mark unavailable",
+        message:
+          error instanceof Error
+            ? error.message
+            : "Failed to mark unavailable",
         type: "error",
       });
     } finally {
@@ -948,6 +1097,7 @@ export default function QueueTab() {
           onMarkReady={handleMarkReady}
           onCompletePickup={handleCompletePickup}
           onMarkUnavailable={handleMarkUnavailable}
+          unavailableEligibleRequestIds={unavailableEligibleRequestIds}
           updatingIds={updatingIds}
           actionsDisabled={actionsDisabled}
           reliabilityMessage={reliabilityMessage}

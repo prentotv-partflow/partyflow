@@ -11,6 +11,7 @@ type Props = {
   onMarkReady: (requestIds: string[]) => void;
   onCompletePickup: (requestIds: string[]) => void;
   onMarkUnavailable: (requestIds: string[]) => void;
+  unavailableEligibleRequestIds?: string[];
   updatingIds?: string[];
   actionsDisabled?: boolean;
   reliabilityMessage?: string;
@@ -280,11 +281,16 @@ export default function QueueView({
   onMarkReady,
   onCompletePickup,
   onMarkUnavailable,
+  unavailableEligibleRequestIds = [],
   updatingIds = [],
   actionsDisabled = false,
   reliabilityMessage = "",
 }: Props) {
   const [readySearch, setReadySearch] = useState("");
+
+  const unavailableEligibleRequestIdSet = useMemo(() => {
+    return new Set(unavailableEligibleRequestIds);
+  }, [unavailableEligibleRequestIds]);
 
   const pendingOrders = useMemo(() => {
     return groupByOrderFromItemGroups(pending, "pending");
@@ -395,6 +401,13 @@ export default function QueueView({
                 : "border-white/6";
 
               const buttonDisabled = isUpdating || actionsDisabled;
+              const canMarkUnavailable =
+                isPending &&
+                group.requestIds.some((id) =>
+                  unavailableEligibleRequestIdSet.has(id)
+                );
+              const unavailableButtonDisabled =
+                buttonDisabled || !canMarkUnavailable;
               const metaLabel = getRequestMetaLabel(
                 group.orderNumber,
                 group.sectionId
@@ -491,15 +504,27 @@ export default function QueueView({
 
                         <button
                           onClick={() => onMarkUnavailable(group.requestIds)}
-                          disabled={buttonDisabled}
-                          className="w-full rounded-full border border-red-400/25 bg-red-500/10 px-4 py-3 text-sm font-medium text-red-200 transition hover:bg-red-500/15 active:scale-[0.99] disabled:cursor-not-allowed disabled:border-gray-500/20 disabled:bg-gray-500/10 disabled:text-gray-400"
+                          disabled={unavailableButtonDisabled}
+                          className={`w-full rounded-full border px-4 py-3 text-sm font-medium transition active:scale-[0.99] ${
+                            unavailableButtonDisabled
+                              ? "cursor-not-allowed border-gray-500/20 bg-gray-500/10 text-gray-400"
+                              : "border-red-400/25 bg-red-500/10 text-red-200 hover:bg-red-500/15"
+                          }`}
                         >
                           {isUpdating
                             ? "Updating..."
                             : actionsDisabled
                             ? "Waiting for live sync"
-                            : "Mark Unavailable"}
+                            : canMarkUnavailable
+                            ? "Mark Unavailable"
+                            : "Unavailable Locked"}
                         </button>
+
+                        {!buttonDisabled && !canMarkUnavailable ? (
+                          <p className="text-center text-[11px] leading-4 text-white/28">
+                            Requires an out-of-stock item.
+                          </p>
+                        ) : null}
                       </div>
                     ) : (
                       <button
