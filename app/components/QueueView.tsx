@@ -12,12 +12,19 @@ type Props = {
   onCompletePickup: (requestIds: string[]) => void;
   onMarkUnavailable: (requestIds: string[]) => void;
   unavailableEligibleRequestIds?: string[];
+  inventoryQtyByMenuItemId?: Record<string, number>;
   updatingIds?: string[];
   actionsDisabled?: boolean;
   reliabilityMessage?: string;
 };
 
 type ColumnType = "pending" | "preparing" | "ready";
+
+type RequestWithInventory = GroupedRequestCard["requests"][number] & {
+  menuItemId?: string;
+  itemId?: string;
+  menuId?: string;
+};
 
 type OrderGroupedCard = {
   groupKey: string;
@@ -32,6 +39,7 @@ type OrderGroupedCard = {
   itemLines: {
     itemName: string;
     quantity: number;
+    menuItemIds: string[];
   }[];
   latestCreatedAt?: GroupedRequestCard["latestCreatedAt"];
   queueAgeLevel?: GroupedRequestCard["queueAgeLevel"];
@@ -82,6 +90,10 @@ function getTimestampMs(
   }
 
   return 0;
+}
+
+function getMenuItemIdFromRequest(request: RequestWithInventory) {
+  return request.menuItemId || request.itemId || request.menuId || "";
 }
 
 function getColumnSummary(type: ColumnType, count: number) {
@@ -154,7 +166,10 @@ function groupByOrderFromItemGroups(
       orderCount: number;
       requestIds: string[];
       requests: GroupedRequestCard["requests"];
-      itemMap: Map<string, { itemName: string; quantity: number }>;
+      itemMap: Map<
+        string,
+        { itemName: string; quantity: number; menuItemIds: Set<string> }
+      >;
       latestCreatedAt?: GroupedRequestCard["latestCreatedAt"];
       queueAgeLevel?: GroupedRequestCard["queueAgeLevel"];
       queueAgeLabel?: GroupedRequestCard["queueAgeLabel"];
@@ -214,14 +229,20 @@ function groupByOrderFromItemGroups(
       existing.orderCount += 1;
 
       const itemKey = request.itemName.trim().toLowerCase();
+      const menuItemId = getMenuItemIdFromRequest(request as RequestWithInventory);
       const existingItem = existing.itemMap.get(itemKey);
 
       if (existingItem) {
         existingItem.quantity += requestQuantity;
+
+        if (menuItemId) {
+          existingItem.menuItemIds.add(menuItemId);
+        }
       } else {
         existing.itemMap.set(itemKey, {
           itemName: request.itemName.trim(),
           quantity: requestQuantity,
+          menuItemIds: new Set(menuItemId ? [menuItemId] : []),
         });
       }
 
@@ -263,7 +284,11 @@ function groupByOrderFromItemGroups(
       orderCount: group.orderCount,
       requestIds: group.requestIds,
       requests: group.requests,
-      itemLines: Array.from(group.itemMap.values()),
+      itemLines: Array.from(group.itemMap.values()).map((item) => ({
+        itemName: item.itemName,
+        quantity: item.quantity,
+        menuItemIds: Array.from(item.menuItemIds),
+      })),
       latestCreatedAt: group.latestCreatedAt,
       queueAgeLevel: group.queueAgeLevel,
       queueAgeLabel: group.queueAgeLabel,
@@ -282,6 +307,7 @@ export default function QueueView({
   onCompletePickup,
   onMarkUnavailable,
   unavailableEligibleRequestIds = [],
+  inventoryQtyByMenuItemId = {},
   updatingIds = [],
   actionsDisabled = false,
   reliabilityMessage = "",
@@ -465,20 +491,50 @@ export default function QueueView({
                   </div>
 
                   <div className="mt-4 space-y-2 rounded-xl border border-white/5 bg-white/[0.03] px-3 py-3">
-                    {group.itemLines.map((item) => (
-                      <div
-                        key={item.itemName}
-                        className="flex items-center justify-between gap-3 text-sm"
-                      >
-                        <span className="truncate text-gray-100">
-                          {item.itemName}
-                        </span>
+                    {group.itemLines.map((item) => {
+                      const availableQty = item.menuItemIds.reduce(
+                        (total, menuItemId) =>
+                          total + Number(inventoryQtyByMenuItemId[menuItemId] ?? 0),
+                        0
+                      );
+                      const isInsufficient =
+                        isPending && item.quantity > availableQty;
 
-                        <span className="shrink-0 rounded-full bg-white/10 px-2 py-0.5 text-xs font-medium text-white/75">
-                          x{item.quantity}
-                        </span>
-                      </div>
-                    ))}
+                      return (
+                        <div
+                          key={item.itemName}
+                          className={`flex items-center justify-between gap-3 rounded-lg px-2 py-1.5 text-sm ${
+                            isInsufficient
+                              ? "border border-red-400/15 bg-red-500/10"
+                              : ""
+                          }`}
+                        >
+                          <div className="min-w-0">
+                            <span
+                              className={`truncate ${
+                                isInsufficient ? "text-red-100" : "text-gray-100"
+                              }`}
+                            >
+                              {item.itemName}
+                            </span>
+                          </div>
+
+                          <div className="flex shrink-0 items-center gap-2">
+                            {isInsufficient ? (
+                              <span className="rounded-full border border-red-300/20 bg-red-400/12 px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.12em] text-red-100">
+                                {availableQty <= 0
+                                  ? "Out"
+                                  : `Only ${availableQty} left`}
+                              </span>
+                            ) : null}
+
+                            <span className="rounded-full bg-white/10 px-2 py-0.5 text-xs font-medium text-white/75">
+                              x{item.quantity}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
 
                   {actionsDisabled && reliabilityMessage ? (
@@ -522,7 +578,7 @@ export default function QueueView({
 
                         {!buttonDisabled && !canMarkUnavailable ? (
                           <p className="text-center text-[11px] leading-4 text-white/28">
-                            Requires an out-of-stock item.
+                            Requires insufficient inventory.
                           </p>
                         ) : null}
                       </div>

@@ -534,6 +534,16 @@ export default function QueueTab() {
     return getMostRequestedItemLabel(requests);
   }, [requests]);
 
+  const inventoryQtyByMenuItemId = useMemo(() => {
+    const map: Record<string, number> = {};
+
+    menuInventory.forEach((item) => {
+      map[item.id] = Number(item.qty ?? 0);
+    });
+
+    return map;
+  }, [menuInventory]);
+
   const menuQtyById = useMemo(() => {
     const map = new Map<string, number>();
 
@@ -554,10 +564,31 @@ export default function QueueTab() {
         if (!menuItemId) return false;
 
         const currentQty = menuQtyById.get(menuItemId);
-        return typeof currentQty === "number" && currentQty <= 0;
+        const requestedQty = Math.max(Number(request.quantity ?? 1), 1);
+
+        return typeof currentQty === "number" && requestedQty > currentQty;
       })
       .map((request) => request.id);
   }, [menuQtyById, pendingRequests]);
+
+  const unavailableItemCount = useMemo(() => {
+    return unavailableRequests.reduce((count, request) => {
+      const menuItemId = getMenuItemIdFromRequest(
+        request as RequestWithInventory
+      );
+
+      if (!menuItemId) return count;
+
+      const currentQty = menuQtyById.get(menuItemId);
+
+      if (typeof currentQty !== "number") return count;
+
+      const requestedQty = Math.max(Number(request.quantity ?? 1), 1);
+      const unavailableQty = Math.max(requestedQty - currentQty, 0);
+
+      return count + unavailableQty;
+    }, 0);
+  }, [menuQtyById, unavailableRequests]);
 
   const pendingGroups = useMemo(
     () => groupRequestsByItem(pendingRequests, "pending", nowMs),
@@ -833,6 +864,7 @@ export default function QueueTab() {
           requestRef: (typeof requestRefs)[number];
           menuItemId: string;
           itemName: string;
+          quantity: number;
         }[] = [];
 
         const menuItemIds = new Set<string>();
@@ -851,6 +883,7 @@ export default function QueueTab() {
 
           const menuItemId = getMenuItemIdFromRequest(requestData);
           const itemName = requestData.itemName || "Item";
+          const quantity = Math.max(Number(requestData.quantity ?? 1), 1);
 
           if (!menuItemId) {
             throw new Error(
@@ -862,6 +895,7 @@ export default function QueueTab() {
             requestRef: requestRefs[index],
             menuItemId,
             itemName,
+            quantity,
           });
 
           menuItemIds.add(menuItemId);
@@ -879,7 +913,7 @@ export default function QueueTab() {
           menuRefs.map((menuRef) => transaction.get(menuRef))
         );
 
-        const outOfStockMenuIds = new Set<string>();
+        const menuQtyMap = new Map<string, number>();
 
         menuSnapshots.forEach((menuSnap, index) => {
           if (!menuSnap.exists()) {
@@ -890,18 +924,17 @@ export default function QueueTab() {
           const menuData = menuSnap.data() as { qty?: number };
           const currentQty = Number(menuData.qty ?? 0);
 
-          if (currentQty <= 0) {
-            outOfStockMenuIds.add(menuRef.id);
-          }
+          menuQtyMap.set(menuRef.id, currentQty);
         });
 
-        const canMarkUnavailable = eligibleRequests.some((request) =>
-          outOfStockMenuIds.has(request.menuItemId)
-        );
+        const canMarkUnavailable = eligibleRequests.some((request) => {
+          const currentQty = menuQtyMap.get(request.menuItemId);
+          return typeof currentQty === "number" && request.quantity > currentQty;
+        });
 
         if (!canMarkUnavailable) {
           throw new Error(
-            "Unavailable is locked. At least one item must be out of stock."
+            "Unavailable is locked. At least one item must have insufficient inventory."
           );
         }
 
@@ -1071,10 +1104,10 @@ export default function QueueTab() {
 
             <div className="rounded-2xl border border-red-400/12 bg-red-500/8 px-4 py-3">
               <p className="text-[10px] uppercase tracking-[0.16em] text-red-200/70">
-                Unavailable
+                Unavailable Units
               </p>
               <p className="mt-1 text-lg font-semibold text-red-300">
-                {unavailableRequests.length}
+                {unavailableItemCount}
               </p>
             </div>
 
@@ -1098,6 +1131,7 @@ export default function QueueTab() {
           onCompletePickup={handleCompletePickup}
           onMarkUnavailable={handleMarkUnavailable}
           unavailableEligibleRequestIds={unavailableEligibleRequestIds}
+          inventoryQtyByMenuItemId={inventoryQtyByMenuItemId}
           updatingIds={updatingIds}
           actionsDisabled={actionsDisabled}
           reliabilityMessage={reliabilityMessage}
