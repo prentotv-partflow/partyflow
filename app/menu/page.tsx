@@ -1243,16 +1243,16 @@ function MenuContent() {
 
           <section className="overflow-hidden rounded-3xl border border-[#8B5CFF]/15 bg-[#1B1F2C]/95 shadow-[0_10px_30px_rgba(0,0,0,0.22)]">
             <div className="border-b border-white/6 px-4 py-4">
-              <p className="text-[10px] uppercase tracking-[0.18em] text-[#B8A6FF]">
-                VIP Menu
+              <p className="text-[14px] uppercase tracking-[0.18em] text-[#B8A6FF]">
+                Order. Flow. Enjoy
               </p>
 
-              <h2 className="mt-1 text-lg font-semibold text-white">
-                Request service from your section
-              </h2>
+              <h1 className="mt-1 text-lg font-semibold text-white">
+                Service Without The Crowd
+              </h1>
 
               <p className="mt-1 text-sm leading-6 text-white/55">
-                Add bottles, mixers, ice, cups, or add-ons to your request, then
+                Add bottles, ice, cups, or add-ons to your request, then
                 review the total before sending.
               </p>
             </div>
