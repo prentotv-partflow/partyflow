@@ -30,16 +30,20 @@ type ToastState = {
 
 type ConnectionStatus = "connecting" | "live" | "reconnecting" | "error";
 
+type EffectiveStatus = Status | "unavailable";
+
 type FirestoreTimestampLike = {
   seconds?: number;
   nanoseconds?: number;
   toMillis?: () => number;
 } | null;
 
-type RequestWithInventory = Request & {
+type RequestWithInventory = Omit<Request, "status"> & {
+  status: Status | "unavailable";
   menuItemId?: string;
   itemId?: string;
   menuId?: string;
+  unavailableAt?: FirestoreTimestampLike;
 };
 
 function getQueueCacheKey(eventId: string) {
@@ -138,7 +142,10 @@ function getGroupPendingAgeInfo(requests: Request[], currentTimeMs: number) {
   };
 }
 
-function getEffectiveStatus(request: Request): Status {
+function getEffectiveStatus(request: RequestWithInventory): EffectiveStatus {
+  if (request.status === "unavailable") return "unavailable";
+  if (timestampToMillis(request.unavailableAt) > 0) return "unavailable";
+
   const completedMs = timestampToMillis(request.completedAt);
   if (completedMs > 0) return "completed";
 
@@ -451,7 +458,7 @@ export default function QueueTab() {
 
     const timeout = setTimeout(() => {
       setToast(null);
-    }, 2000);
+    }, 2500);
 
     return () => clearTimeout(timeout);
   }, [toast]);
@@ -469,6 +476,12 @@ export default function QueueTab() {
 
   const readyRequests = useMemo(
     () => requests.filter((request) => getEffectiveStatus(request) === "ready"),
+    [requests]
+  );
+
+  const unavailableRequests = useMemo(
+    () =>
+      requests.filter((request) => getEffectiveStatus(request) === "unavailable"),
     [requests]
   );
 
@@ -508,10 +521,7 @@ export default function QueueTab() {
   const totalVisibleGroups =
     pendingGroups.length + preparingGroups.length + readyGroups.length;
 
-  const handleStatusUpdate = async (
-    requestIds: string[],
-    nextStatus: "preparing" | "ready"
-  ) => {
+  const handleStartPreparing = async (requestIds: string[]) => {
     if (!eventId || requestIds.length === 0 || actionsDisabled) return;
 
     const idsToUpdate = requestIds.filter((requestId) => {
@@ -523,62 +533,7 @@ export default function QueueTab() {
     try {
       setUpdatingIds((prev) => [...prev, ...idsToUpdate]);
 
-      await Promise.all(
-        idsToUpdate.map((requestId) => {
-          const requestRef = doc(db, "events", eventId, "requests", requestId);
-
-          if (nextStatus === "preparing") {
-            return updateDoc(requestRef, {
-              status: "preparing",
-              preparingAt: serverTimestamp(),
-            });
-          }
-
-          return updateDoc(requestRef, {
-            status: "ready",
-            readyAt: serverTimestamp(),
-          });
-        })
-      );
-
-      setToast({
-        message:
-          nextStatus === "preparing"
-            ? `${idsToUpdate.length} item${
-                idsToUpdate.length === 1 ? "" : "s"
-              } added to service flow`
-            : `${idsToUpdate.length} item${
-                idsToUpdate.length === 1 ? "" : "s"
-              } sent for delivery`,
-        type: "success",
-      });
-    } catch (error) {
-      console.error("Failed to update grouped requests:", error);
-
-      setToast({
-        message: "Failed to update service flow",
-        type: "error",
-      });
-    } finally {
-      setUpdatingIds((prev) =>
-        prev.filter((id) => !idsToUpdate.includes(id))
-      );
-    }
-  };
-
-  const handleCompletePickup = async (requestIds: string[]) => {
-    if (!eventId || requestIds.length === 0 || actionsDisabled) return;
-
-    const idsToUpdate = requestIds.filter((requestId) => {
-      return !updatingIds.includes(requestId);
-    });
-
-    if (idsToUpdate.length === 0) return;
-
-    try {
-      setUpdatingIds((prev) => [...prev, ...idsToUpdate]);
-
-      const completedCount = await runTransaction(db, async (transaction) => {
+      const startedCount = await runTransaction(db, async (transaction) => {
         const requestRefs = idsToUpdate.map((requestId) =>
           doc(db, "events", eventId, "requests", requestId)
         );
@@ -588,7 +543,6 @@ export default function QueueTab() {
         );
 
         const eligibleRequests: {
-          requestId: string;
           requestRef: (typeof requestRefs)[number];
           menuItemId: string;
           quantity: number;
@@ -603,8 +557,9 @@ export default function QueueTab() {
           }
 
           const requestData = requestSnap.data() as RequestWithInventory;
+          const effectiveStatus = getEffectiveStatus(requestData);
 
-          if (requestData.status === "completed" || requestData.completedAt) {
+          if (effectiveStatus !== "pending") {
             return;
           }
 
@@ -614,12 +569,11 @@ export default function QueueTab() {
 
           if (!menuItemId) {
             throw new Error(
-              `${itemName} is missing menuItemId. New orders must store the menu item document ID before inventory can auto-reduce.`
+              `${itemName} is missing menuItemId. This order cannot reserve inventory safely.`
             );
           }
 
           eligibleRequests.push({
-            requestId: idsToUpdate[index],
             requestRef: requestRefs[index],
             menuItemId,
             quantity,
@@ -646,8 +600,7 @@ export default function QueueTab() {
 
         menuSnapshots.forEach((menuSnap, index) => {
           const menuRef = menuRefs[index];
-          const menuItemId = menuRef.id;
-          const deduction = inventoryDeductions.get(menuItemId) ?? 0;
+          const deduction = inventoryDeductions.get(menuRef.id) ?? 0;
 
           if (!menuSnap.exists()) {
             throw new Error("Menu item not found.");
@@ -658,7 +611,7 @@ export default function QueueTab() {
 
           if (currentQty < deduction) {
             throw new Error(
-              `${menuData.name || "Item"} only has ${currentQty} left. Cannot complete pickup for ${deduction}.`
+              `${menuData.name || "Item"} only has ${currentQty} left. Mark this order unavailable and ask the guest to choose another item.`
             );
           }
         });
@@ -676,8 +629,8 @@ export default function QueueTab() {
 
         eligibleRequests.forEach(({ requestRef }) => {
           transaction.update(requestRef, {
-            status: "completed",
-            completedAt: serverTimestamp(),
+            status: "preparing",
+            preparingAt: serverTimestamp(),
           });
         });
 
@@ -686,21 +639,21 @@ export default function QueueTab() {
 
       setToast({
         message:
-          completedCount === 0
-            ? "No eligible items to complete"
-            : `${completedCount} item${
-                completedCount === 1 ? "" : "s"
-              } delivered and removed from inventory`,
+          startedCount === 0
+            ? "No pending items to start"
+            : `${startedCount} item${
+                startedCount === 1 ? "" : "s"
+              } started and reserved from inventory`,
         type: "success",
       });
     } catch (error) {
-      console.error("Failed to mark delivered:", error);
+      console.error("Failed to start service flow:", error);
 
       setToast({
         message:
           error instanceof Error
             ? error.message
-            : "Failed to mark delivered",
+            : "Inventory unavailable. Order stayed pending.",
         type: "error",
       });
     } finally {
@@ -710,12 +663,133 @@ export default function QueueTab() {
     }
   };
 
-  const handleStartPreparing = async (requestIds: string[]) => {
-    await handleStatusUpdate(requestIds, "preparing");
+  const handleMarkReady = async (requestIds: string[]) => {
+    if (!eventId || requestIds.length === 0 || actionsDisabled) return;
+
+    const idsToUpdate = requestIds.filter((requestId) => {
+      return !updatingIds.includes(requestId);
+    });
+
+    if (idsToUpdate.length === 0) return;
+
+    try {
+      setUpdatingIds((prev) => [...prev, ...idsToUpdate]);
+
+      await Promise.all(
+        idsToUpdate.map((requestId) => {
+          const requestRef = doc(db, "events", eventId, "requests", requestId);
+
+          return updateDoc(requestRef, {
+            status: "ready",
+            readyAt: serverTimestamp(),
+          });
+        })
+      );
+
+      setToast({
+        message: `${idsToUpdate.length} item${
+          idsToUpdate.length === 1 ? "" : "s"
+        } sent for delivery`,
+        type: "success",
+      });
+    } catch (error) {
+      console.error("Failed to mark ready:", error);
+
+      setToast({
+        message: "Failed to send item for delivery",
+        type: "error",
+      });
+    } finally {
+      setUpdatingIds((prev) =>
+        prev.filter((id) => !idsToUpdate.includes(id))
+      );
+    }
   };
 
-  const handleMarkReady = async (requestIds: string[]) => {
-    await handleStatusUpdate(requestIds, "ready");
+  const handleCompletePickup = async (requestIds: string[]) => {
+    if (!eventId || requestIds.length === 0 || actionsDisabled) return;
+
+    const idsToUpdate = requestIds.filter((requestId) => {
+      return !updatingIds.includes(requestId);
+    });
+
+    if (idsToUpdate.length === 0) return;
+
+    try {
+      setUpdatingIds((prev) => [...prev, ...idsToUpdate]);
+
+      await Promise.all(
+        idsToUpdate.map((requestId) => {
+          const requestRef = doc(db, "events", eventId, "requests", requestId);
+
+          return updateDoc(requestRef, {
+            status: "completed",
+            completedAt: serverTimestamp(),
+          });
+        })
+      );
+
+      setToast({
+        message: `${idsToUpdate.length} item${
+          idsToUpdate.length === 1 ? "" : "s"
+        } delivered`,
+        type: "success",
+      });
+    } catch (error) {
+      console.error("Failed to mark delivered:", error);
+
+      setToast({
+        message: "Failed to mark delivered",
+        type: "error",
+      });
+    } finally {
+      setUpdatingIds((prev) =>
+        prev.filter((id) => !idsToUpdate.includes(id))
+      );
+    }
+  };
+
+  const handleMarkUnavailable = async (requestIds: string[]) => {
+    if (!eventId || requestIds.length === 0 || actionsDisabled) return;
+
+    const idsToUpdate = requestIds.filter((requestId) => {
+      return !updatingIds.includes(requestId);
+    });
+
+    if (idsToUpdate.length === 0) return;
+
+    try {
+      setUpdatingIds((prev) => [...prev, ...idsToUpdate]);
+
+      await Promise.all(
+        idsToUpdate.map((requestId) => {
+          const requestRef = doc(db, "events", eventId, "requests", requestId);
+
+          return updateDoc(requestRef, {
+            status: "unavailable",
+            unavailableAt: serverTimestamp(),
+          });
+        })
+      );
+
+      setToast({
+        message: `${idsToUpdate.length} item${
+          idsToUpdate.length === 1 ? "" : "s"
+        } marked unavailable`,
+        type: "success",
+      });
+    } catch (error) {
+      console.error("Failed to mark unavailable:", error);
+
+      setToast({
+        message: "Failed to mark unavailable",
+        type: "error",
+      });
+    } finally {
+      setUpdatingIds((prev) =>
+        prev.filter((id) => !idsToUpdate.includes(id))
+      );
+    }
   };
 
   if (!eventId) {
@@ -818,7 +892,7 @@ export default function QueueTab() {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3 px-4 py-4 sm:grid-cols-4 sm:px-5">
+          <div className="grid grid-cols-2 gap-3 px-4 py-4 sm:grid-cols-5 sm:px-5">
             <div className="rounded-2xl border border-yellow-400/12 bg-yellow-500/8 px-4 py-3">
               <p className="text-[10px] uppercase tracking-[0.16em] text-yellow-200/70">
                 Pending
@@ -846,6 +920,15 @@ export default function QueueTab() {
               </p>
             </div>
 
+            <div className="rounded-2xl border border-red-400/12 bg-red-500/8 px-4 py-3">
+              <p className="text-[10px] uppercase tracking-[0.16em] text-red-200/70">
+                Unavailable
+              </p>
+              <p className="mt-1 text-lg font-semibold text-red-300">
+                {unavailableRequests.length}
+              </p>
+            </div>
+
             <div className="rounded-2xl border border-white/8 bg-white/5 px-4 py-3">
               <p className="text-[10px] uppercase tracking-[0.16em] text-white/40">
                 Visible Groups
@@ -864,6 +947,7 @@ export default function QueueTab() {
           onStartPreparing={handleStartPreparing}
           onMarkReady={handleMarkReady}
           onCompletePickup={handleCompletePickup}
+          onMarkUnavailable={handleMarkUnavailable}
           updatingIds={updatingIds}
           actionsDisabled={actionsDisabled}
           reliabilityMessage={reliabilityMessage}

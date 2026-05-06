@@ -22,7 +22,12 @@ type MenuItem = {
   price?: number;
 };
 
-type RequestStatus = "pending" | "preparing" | "ready" | "completed";
+type RequestStatus =
+  | "pending"
+  | "preparing"
+  | "ready"
+  | "completed"
+  | "unavailable";
 
 type FirestoreTimestampLike = {
   seconds?: number;
@@ -44,6 +49,7 @@ type RequestItem = {
   preparingAt?: FirestoreTimestampLike;
   readyAt?: FirestoreTimestampLike;
   completedAt?: FirestoreTimestampLike;
+  unavailableAt?: FirestoreTimestampLike;
 };
 
 type CartItem = {
@@ -57,7 +63,12 @@ type AddFeedbackMode = "idle" | "teach" | "pulse";
 
 type CachedRequestItem = Omit<
   RequestItem,
-  "createdAt" | "pendingAt" | "preparingAt" | "readyAt" | "completedAt"
+  | "createdAt"
+  | "pendingAt"
+  | "preparingAt"
+  | "readyAt"
+  | "completedAt"
+  | "unavailableAt"
 >;
 
 function timestampToMillis(value?: FirestoreTimestampLike) {
@@ -76,7 +87,16 @@ function timestampToMillis(value?: FirestoreTimestampLike) {
   return 0;
 }
 
+function getRequestGroupId(request: RequestItem) {
+  return request.orderGroupId || request.id;
+}
+
 function getEffectiveRequestStatus(request: RequestItem): RequestStatus {
+  if (request.status === "unavailable") return "unavailable";
+
+  const unavailableMs = timestampToMillis(request.unavailableAt);
+  if (unavailableMs > 0) return "unavailable";
+
   const completedMs = timestampToMillis(request.completedAt);
   if (completedMs > 0) return "completed";
 
@@ -93,13 +113,22 @@ function getEffectiveRequestStatus(request: RequestItem): RequestStatus {
 }
 
 function getLifecycleSortTime(request: RequestItem) {
+  const unavailableMs = timestampToMillis(request.unavailableAt);
   const completedMs = timestampToMillis(request.completedAt);
   const readyMs = timestampToMillis(request.readyAt);
   const preparingMs = timestampToMillis(request.preparingAt);
   const pendingMs = timestampToMillis(request.pendingAt);
   const createdMs = timestampToMillis(request.createdAt);
 
-  return completedMs || readyMs || preparingMs || pendingMs || createdMs || 0;
+  return (
+    unavailableMs ||
+    completedMs ||
+    readyMs ||
+    preparingMs ||
+    pendingMs ||
+    createdMs ||
+    0
+  );
 }
 
 function getStatusBadgeClass(status: RequestStatus) {
@@ -112,6 +141,8 @@ function getStatusBadgeClass(status: RequestStatus) {
       return "border border-emerald-400/20 bg-emerald-500/10 text-emerald-300";
     case "completed":
       return "border border-white/10 bg-white/5 text-white/70";
+    case "unavailable":
+      return "border border-red-400/25 bg-red-500/12 text-red-200";
     default:
       return "border border-white/10 bg-white/5 text-white/70";
   }
@@ -127,6 +158,8 @@ function getStatusLabel(status: RequestStatus) {
       return "Out for delivery";
     case "completed":
       return "Delivered";
+    case "unavailable":
+      return "Unavailable";
     default:
       return status;
   }
@@ -145,6 +178,8 @@ function getStatusNote(status: RequestStatus, orderNumber?: number) {
       return `Out for delivery. Settle with the attendant and give${orderText}.`;
     case "completed":
       return `Delivery complete for${orderText}.`;
+    case "unavailable":
+      return "Item unavailable. Please choose another item from the menu and send a new request.";
     default:
       return "";
   }
@@ -160,6 +195,8 @@ function getStatusAccentClass(status: RequestStatus) {
       return "bg-emerald-400";
     case "completed":
       return "bg-white/30";
+    case "unavailable":
+      return "bg-red-400";
     default:
       return "bg-white/30";
   }
@@ -167,23 +204,25 @@ function getStatusAccentClass(status: RequestStatus) {
 
 function getStatusPriority(status: RequestStatus) {
   switch (status) {
-    case "ready":
+    case "unavailable":
       return 0;
-    case "completed":
+    case "ready":
       return 1;
-    case "preparing":
+    case "completed":
       return 2;
-    case "pending":
+    case "preparing":
       return 3;
-    default:
+    case "pending":
       return 4;
+    default:
+      return 5;
   }
 }
 
 function getGuestStorageKey(
   eventId: string,
   guestId: string,
-  key: "cart" | "menu" | "requests"
+  key: "cart" | "menu" | "requests" | "dismissedUnavailable"
 ) {
   return `partyflow_guest_${key}_${eventId}_${guestId}`;
 }
@@ -242,6 +281,14 @@ function sanitizeMenuItems(value: unknown): MenuItem[] {
   });
 }
 
+function sanitizeStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+
+  return value.filter((item): item is string => {
+    return typeof item === "string" && item.trim().length > 0;
+  });
+}
+
 function sanitizeCachedRequests(value: unknown): RequestItem[] {
   if (!Array.isArray(value)) return [];
 
@@ -256,7 +303,9 @@ function sanitizeCachedRequests(value: unknown): RequestItem[] {
       typeof maybeItem.quantity === "number" &&
       maybeItem.quantity > 0 &&
       typeof maybeItem.guestId === "string" &&
-      ["pending", "preparing", "ready", "completed"].includes(maybeItem.status)
+      ["pending", "preparing", "ready", "completed", "unavailable"].includes(
+        maybeItem.status
+      )
     );
   });
 }
@@ -282,6 +331,8 @@ function MenuContent() {
   const [requestsLiveSync, setRequestsLiveSync] = useState(false);
   const [usingCachedData, setUsingCachedData] = useState(false);
   const [recentRequestIds, setRecentRequestIds] = useState<string[]>([]);
+  const [dismissedUnavailableGroupIds, setDismissedUnavailableGroupIds] =
+    useState<string[]>([]);
   const [highlightedStatusId, setHighlightedStatusId] = useState<string | null>(
     null
   );
@@ -345,14 +396,23 @@ function MenuContent() {
       session.guestId,
       "requests"
     );
+    const dismissedUnavailableKey = getGuestStorageKey(
+      session.eventId,
+      session.guestId,
+      "dismissedUnavailable"
+    );
 
     const restoredCart = sanitizeCartItems(readLocalJson(cartKey, []));
     const cachedMenu = sanitizeMenuItems(readLocalJson(menuKey, []));
     const cachedRequests = sanitizeCachedRequests(
       readLocalJson(requestsKey, [])
     );
+    const cachedDismissedUnavailableGroupIds = sanitizeStringArray(
+      readLocalJson(dismissedUnavailableKey, [])
+    );
 
     setCart(restoredCart);
+    setDismissedUnavailableGroupIds(cachedDismissedUnavailableGroupIds);
     setCartHydrated(true);
 
     if (cachedMenu.length > 0) {
@@ -387,6 +447,18 @@ function MenuContent() {
 
     writeLocalJson(cartKey, cart);
   }, [cart, cartHydrated, session]);
+
+  useEffect(() => {
+    if (!session || !cartHydrated) return;
+
+    const dismissedUnavailableKey = getGuestStorageKey(
+      session.eventId,
+      session.guestId,
+      "dismissedUnavailable"
+    );
+
+    writeLocalJson(dismissedUnavailableKey, dismissedUnavailableGroupIds);
+  }, [cartHydrated, dismissedUnavailableGroupIds, session]);
 
   useEffect(() => {
     return () => {
@@ -723,6 +795,15 @@ function MenuContent() {
     setCartOpen(false);
   };
 
+  const handleDismissUnavailable = (groupId: string) => {
+    setDismissedUnavailableGroupIds((prev) => {
+      if (prev.includes(groupId)) return prev;
+      return [...prev, groupId];
+    });
+
+    setToast("Unavailable request dismissed");
+  };
+
   const handleSubmitCart = async () => {
     if (!session || cart.length === 0 || submittingCart) return;
 
@@ -789,6 +870,7 @@ function MenuContent() {
             preparingAt: null,
             readyAt: null,
             completedAt: null,
+            unavailableAt: null,
           });
         });
 
@@ -842,7 +924,7 @@ function MenuContent() {
     > = {};
 
     sortedRequests.forEach((req) => {
-      const groupId = req.orderGroupId || req.id;
+      const groupId = getRequestGroupId(req);
       const effectiveStatus = getEffectiveRequestStatus(req);
       const lifecycleTime = getLifecycleSortTime(req);
 
@@ -877,7 +959,8 @@ function MenuContent() {
       groups[groupId].items[itemKey].quantity += req.quantity;
 
       if (
-        getStatusPriority(effectiveStatus) < getStatusPriority(groups[groupId].status)
+        getStatusPriority(effectiveStatus) <
+        getStatusPriority(groups[groupId].status)
       ) {
         groups[groupId].status = effectiveStatus;
       }
@@ -895,15 +978,25 @@ function MenuContent() {
       }
     });
 
-    return Object.values(groups).sort((a, b) => {
-      const priorityDiff =
-        getStatusPriority(a.status) - getStatusPriority(b.status);
+    return Object.values(groups)
+      .filter((group) => {
+        if (group.status !== "unavailable") return true;
+        return !dismissedUnavailableGroupIds.includes(group.id);
+      })
+      .sort((a, b) => {
+        const priorityDiff =
+          getStatusPriority(a.status) - getStatusPriority(b.status);
 
-      if (priorityDiff !== 0) return priorityDiff;
+        if (priorityDiff !== 0) return priorityDiff;
 
-      return b.sortTime - a.sortTime;
-    });
-  }, [highlightedStatusId, recentRequestIds, sortedRequests]);
+        return b.sortTime - a.sortTime;
+      });
+  }, [
+    dismissedUnavailableGroupIds,
+    highlightedStatusId,
+    recentRequestIds,
+    sortedRequests,
+  ]);
 
   const filteredMenu = useMemo(() => {
     const query = menuSearch.trim().toLowerCase();
@@ -915,6 +1008,7 @@ function MenuContent() {
 
   const lastReorderRequest = useMemo(() => {
     const sortedByRecent = requests
+      .filter((request) => getEffectiveRequestStatus(request) !== "unavailable")
       .map((request, index) => ({ request, index }))
       .sort((a, b) => {
         const timeDiff =
@@ -962,24 +1056,30 @@ function MenuContent() {
   };
 
   const readyCount = useMemo(() => {
-    return requests.filter((req) => getEffectiveRequestStatus(req) === "ready")
-      .length;
-  }, [requests]);
+    return groupedRequests.filter((group) => group.status === "ready").length;
+  }, [groupedRequests]);
 
   const completedCount = useMemo(() => {
-    return requests.filter(
-      (req) => getEffectiveRequestStatus(req) === "completed"
-    ).length;
-  }, [requests]);
+    return groupedRequests.filter((group) => group.status === "completed")
+      .length;
+  }, [groupedRequests]);
+
+  const unavailableCount = useMemo(() => {
+    return groupedRequests.filter((group) => group.status === "unavailable")
+      .length;
+  }, [groupedRequests]);
 
   const activeRequestCount = useMemo(() => {
-    return requests.filter((req) => {
-      const status = getEffectiveRequestStatus(req);
-      return status === "pending" || status === "preparing" || status === "ready";
+    return groupedRequests.filter((group) => {
+      return (
+        group.status === "pending" ||
+        group.status === "preparing" ||
+        group.status === "ready"
+      );
     }).length;
-  }, [requests]);
+  }, [groupedRequests]);
 
-  const activityAlertCount = activeRequestCount;
+  const activityAlertCount = activeRequestCount + unavailableCount;
 
   const cartItemCount = useMemo(() => {
     return cart.reduce((sum, item) => sum + item.quantity, 0);
@@ -989,6 +1089,7 @@ function MenuContent() {
     return cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
   }, [cart]);
 
+  const hasUnavailableOrders = unavailableCount > 0;
   const hasReadyOrders = readyCount > 0;
   const hasCompletedUpdates = completedCount > 0;
   const hasActivityAlert = activityAlertCount > 0;
@@ -1068,7 +1169,9 @@ function MenuContent() {
               <button
                 onClick={handleViewRequests}
                 className={`flex w-full items-center justify-between rounded-2xl border px-3.5 py-2 text-left transition ${
-                  hasReadyOrders
+                  hasUnavailableOrders
+                    ? "animate-pulse border-red-400/35 bg-[linear-gradient(135deg,rgba(92,22,22,0.9),rgba(39,26,67,0.92))] shadow-[0_0_0_1px_rgba(248,113,113,0.14),0_0_28px_rgba(248,113,113,0.14)] hover:border-red-300/45"
+                    : hasReadyOrders
                     ? "animate-pulse border-emerald-400/35 bg-[linear-gradient(135deg,rgba(16,80,64,0.88),rgba(39,26,67,0.92))] shadow-[0_0_0_1px_rgba(52,211,153,0.12),0_0_28px_rgba(16,185,129,0.14)] hover:border-emerald-300/45 hover:shadow-[0_0_0_1px_rgba(52,211,153,0.18),0_0_32px_rgba(16,185,129,0.18)]"
                     : hasCompletedUpdates
                     ? "border-white/15 bg-white/8 shadow-[0_0_0_1px_rgba(255,255,255,0.06)] hover:bg-white/10"
@@ -1079,7 +1182,9 @@ function MenuContent() {
                   <div className="flex flex-wrap items-center gap-2">
                     <p
                       className={`text-[9px] uppercase leading-none tracking-[0.16em] ${
-                        hasReadyOrders
+                        hasUnavailableOrders
+                          ? "text-red-100"
+                          : hasReadyOrders
                           ? "text-emerald-200/90"
                           : hasCompletedUpdates
                           ? "text-white/70"
@@ -1089,7 +1194,11 @@ function MenuContent() {
                       Your Requests
                     </p>
 
-                    {hasReadyOrders ? (
+                    {hasUnavailableOrders ? (
+                      <span className="rounded-full border border-red-300/20 bg-red-400/12 px-2 py-0.5 text-[9px] font-medium uppercase leading-none tracking-[0.12em] text-red-100">
+                        Action needed
+                      </span>
+                    ) : hasReadyOrders ? (
                       <span className="rounded-full border border-emerald-300/20 bg-emerald-400/12 px-2 py-0.5 text-[9px] font-medium uppercase leading-none tracking-[0.12em] text-emerald-200">
                         Out now
                       </span>
@@ -1101,18 +1210,16 @@ function MenuContent() {
                   </div>
 
                   <p className="mt-1 text-[13px] font-semibold leading-tight text-white">
-                    {hasReadyOrders
-                      ? "View Requests"
-                      : hasCompletedUpdates
-                      ? "View Requests"
-                      : "View Requests"}
+                    View Requests
                   </p>
                 </div>
 
                 <span
                   aria-hidden="true"
                   className={`flex min-w-[38px] items-center justify-center rounded-full px-2.5 py-1 text-sm font-semibold ${
-                    hasReadyOrders
+                    hasUnavailableOrders
+                      ? "border border-red-300/20 bg-red-400/12 text-red-100"
+                      : hasReadyOrders
                       ? "border border-emerald-300/20 bg-emerald-400/12 text-emerald-100"
                       : hasCompletedUpdates
                       ? "border border-white/10 bg-white/8 text-white/75"
@@ -1343,10 +1450,10 @@ function MenuContent() {
               {groupedRequests.length === 0 ? (
                 <div className="rounded-2xl border border-white/5 bg-[#101522] px-4 py-10 text-center">
                   <p className="text-sm font-medium text-white/50">
-                    No requests yet
+                    No active requests
                   </p>
                   <p className="mt-1 text-xs leading-5 text-white/28">
-                    Once you send a service request, it will appear here.
+                    New requests and unresolved service updates will appear here.
                   </p>
                 </div>
               ) : (
@@ -1355,8 +1462,11 @@ function MenuContent() {
                     const effectiveStatus = group.status;
                     const isReady = effectiveStatus === "ready";
                     const isCompleted = effectiveStatus === "completed";
+                    const isUnavailable = effectiveStatus === "unavailable";
 
-                    const cardClass = isReady
+                    const cardClass = isUnavailable
+                      ? "border-red-400/25 bg-red-500/10 shadow-[0_0_0_1px_rgba(248,113,113,0.10),0_0_24px_rgba(248,113,113,0.08)]"
+                      : isReady
                       ? "border-emerald-400/22 bg-emerald-500/10"
                       : isCompleted
                       ? "border-white/10 bg-white/5"
@@ -1391,6 +1501,12 @@ function MenuContent() {
                                       New
                                     </span>
                                   ) : null}
+
+                                  {isUnavailable ? (
+                                    <span className="rounded-full border border-red-300/20 bg-red-400/12 px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.12em] text-red-100">
+                                      Choose another item
+                                    </span>
+                                  ) : null}
                                 </div>
 
                                 <div className="mt-2 space-y-1.5">
@@ -1416,7 +1532,9 @@ function MenuContent() {
 
                             <p
                               className={`mt-3 text-xs ${
-                                isReady
+                                isUnavailable
+                                  ? "text-red-100/90"
+                                  : isReady
                                   ? "text-emerald-200/90"
                                   : isCompleted
                                   ? "text-white/55"
@@ -1425,6 +1543,19 @@ function MenuContent() {
                             >
                               {getStatusNote(effectiveStatus, group.orderNumber)}
                             </p>
+
+                            {isUnavailable ? (
+                              <div className="mt-4">
+                                <button
+                                  onClick={() =>
+                                    handleDismissUnavailable(group.id)
+                                  }
+                                  className="w-full rounded-full border border-red-300/20 bg-red-400/12 px-4 py-2.5 text-sm font-medium text-red-100 transition hover:bg-red-400/18 active:scale-[0.99]"
+                                >
+                                  Dismiss
+                                </button>
+                              </div>
+                            ) : null}
                           </div>
                         </div>
                       </div>

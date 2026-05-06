@@ -10,6 +10,7 @@ type Props = {
   onStartPreparing: (requestIds: string[]) => void;
   onMarkReady: (requestIds: string[]) => void;
   onCompletePickup: (requestIds: string[]) => void;
+  onMarkUnavailable: (requestIds: string[]) => void;
   updatingIds?: string[];
   actionsDisabled?: boolean;
   reliabilityMessage?: string;
@@ -278,6 +279,7 @@ export default function QueueView({
   onStartPreparing,
   onMarkReady,
   onCompletePickup,
+  onMarkUnavailable,
   updatingIds = [],
   actionsDisabled = false,
   reliabilityMessage = "",
@@ -474,17 +476,31 @@ export default function QueueView({
 
                   <div className="mt-4">
                     {type === "pending" ? (
-                      <button
-                        onClick={() => onStartPreparing(group.requestIds)}
-                        disabled={buttonDisabled}
-                        className="w-full rounded-full bg-yellow-500 px-4 py-3 text-sm font-medium text-black transition hover:opacity-90 active:scale-[0.99] disabled:cursor-not-allowed disabled:bg-gray-300 disabled:text-gray-500"
-                      >
-                        {isUpdating
-                          ? "Starting..."
-                          : actionsDisabled
-                          ? "Waiting for live sync"
-                          : "Start"}
-                      </button>
+                      <div className="grid grid-cols-1 gap-2">
+                        <button
+                          onClick={() => onStartPreparing(group.requestIds)}
+                          disabled={buttonDisabled}
+                          className="w-full rounded-full bg-yellow-500 px-4 py-3 text-sm font-medium text-black transition hover:opacity-90 active:scale-[0.99] disabled:cursor-not-allowed disabled:bg-gray-300 disabled:text-gray-500"
+                        >
+                          {isUpdating
+                            ? "Starting..."
+                            : actionsDisabled
+                            ? "Waiting for live sync"
+                            : "Start"}
+                        </button>
+
+                        <button
+                          onClick={() => onMarkUnavailable(group.requestIds)}
+                          disabled={buttonDisabled}
+                          className="w-full rounded-full border border-red-400/25 bg-red-500/10 px-4 py-3 text-sm font-medium text-red-200 transition hover:bg-red-500/15 active:scale-[0.99] disabled:cursor-not-allowed disabled:border-gray-500/20 disabled:bg-gray-500/10 disabled:text-gray-400"
+                        >
+                          {isUpdating
+                            ? "Updating..."
+                            : actionsDisabled
+                            ? "Waiting for live sync"
+                            : "Mark Unavailable"}
+                        </button>
+                      </div>
                     ) : (
                       <button
                         onClick={() => onMarkReady(group.requestIds)}
@@ -575,13 +591,14 @@ export default function QueueView({
                 updatingIds.includes(id)
               );
 
-              const uniqueItemLines = group.requests.reduce<
-                Record<string, number>
-              >((acc, request) => {
-                const key = request.itemName.trim();
-                acc[key] = (acc[key] ?? 0) + (request.quantity ?? 1);
-                return acc;
-              }, {});
+              const uniqueItemLines = group.requests.reduce<Record<string, number>>(
+                (acc, request) => {
+                  const key = request.itemName.trim();
+                  acc[key] = (acc[key] ?? 0) + (request.quantity ?? 1);
+                  return acc;
+                },
+                {}
+              );
 
               const itemEntries = Object.entries(uniqueItemLines);
               const orderNumber = getPrimaryOrderNumber(group.requests);
